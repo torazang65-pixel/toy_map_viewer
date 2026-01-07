@@ -10,6 +10,13 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// ToDo: 현재 Point6D를 기준으로 작성되어 있음.
+//       필요시 pcdPointXYZ 등으로 오버로딩 필요.
+//       LaneMerger나 LaneCleaner 모두 pcd에서 kdtree를 사용하므로,
+//       kdtree안에 들어가는 각 node는 pointXYZ 형태임.
+//       따라서 Point6D안에 pointXYZ를 포함시키거나,
+//       Point6D와 pointXYZ간 변환함수를 만들어야 할 수도 있음.
+
 namespace 
 {
     double GetDirectionScore(const Point6D& current, const Point6D& next) 

@@ -10,6 +10,12 @@
 #include "toy_map_viewer/LaneUtils.h" // CalculateLaneLength 사용
 
 
+/**
+ * This code is outdated.
+ * There was bug in the previous implementation where lanes were trimmed
+ * even when they shouldn't have been, due to incorrect logic in the trimming decision process.
+ */
+
 namespace LaneCleaner {
 
 // KD-Tree 검색용 구조체
