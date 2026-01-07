@@ -128,7 +128,7 @@ namespace LaneMerger {
                     if (angle_deg > ANGLE_THRESHOLD_DEG) continue;
                     
                     // ==============================================================
-                    // need to add some conditions here to check if directions are compatible
+                    // new addition: 방향성 검사
                     // want to connect if the line that connects the two endpoints aligns with their directions
                     double alignment_threshold = std::cos(ANGLE_THRESHOLD_DEG * M_PI / 180.0);
                     Eigen::Vector3d conn_vec(node_b.point.x - node_a.point.x,
