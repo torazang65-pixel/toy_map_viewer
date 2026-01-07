@@ -9,187 +9,183 @@
 #include "toy_map_viewer/DataTypes.h"
 #include "toy_map_viewer/LaneUtils.h" // CalculateLaneLength 사용
 
-
 namespace LaneCleaner {
+    struct PointSourceInfo {
+        int lane_id;
+        int index_in_lane;
+    };
+    struct LaneMetric {
+        int id;
+        double length;
+        double linearity;
+    };
 
-// KD-Tree 검색용 구조체
-struct PointSourceInfo {
-    int lane_id;
-    // int point_idx; // For debugging if needed
-};
+    void TrimOverlappingLaneEnds(std::map<int, Lane>& global_map, const LaneConfig& config){
+        const double OVERLAP_RADIUS = config.overlap_radius; // 30cm 이내
+        const double LINEARITY_TOLERANCE = 1e-3;
 
-void TrimOverlappingLaneEnds(std::map<int, Lane>& global_map, const LaneConfig& config) {
-    const double OVERLAP_RADIUS = config.overlap_radius; // 30cm 이내
-    const double LINEARITY_TOLERANCE = config.linearity_tolerance;
+        std::vector<LaneMetric> lane_metrics;
+        lane_metrics.reserve(global_map.size());
 
-    // 1. 각 Lane의 길이 미리 계산 (비교 기준)
-    std::map<int, double> lane_lengths;
-    std::map<int, double> lane_linearities;
-
-    for (const auto& pair : global_map) {
-        lane_lengths[pair.first] = LaneUtils::CalculateLaneLength(pair.second);
-        lane_linearities[pair.first] = LaneUtils::CalculateLaneLinearity(pair.second);
-    }
-
-    // 2. 전체 포인트 클라우드 빌드 (Look-up용)
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    std::vector<PointSourceInfo> cloud_info; 
-
-    for (const auto& pair : global_map) {
-        int l_id = pair.first;
-        for (const auto& p : pair.second.points) {
-            pcl::PointXYZ pt;
-            pt.x = p.x; pt.y = p.y; pt.z = p.z;
-            cloud->push_back(pt);
-            cloud_info.push_back({l_id});
-        }
-    }
-
-    if (cloud->empty()) return;
-
-    // 3. KD-Tree 생성
-    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-    kdtree.setInputCloud(cloud);
-
-    // 삭제할 Lane ID들을 담을 리스트
-    std::vector<int> lanes_to_remove;
-
-    // 4. 모든 Lane을 순회하며 양 끝단 검사 (Trim Candidate)
-    for (auto& pair : global_map) {
-        int my_id = pair.first;
-        Lane& my_lane = pair.second;
-        double my_len = lane_lengths[my_id];
+        int total_points = 0;
         
-        int n_points = (int)my_lane.points.size();
-        if (n_points < 2) continue;
+        // 1. Calculate lane metrics
+        for (const auto& pair : global_map) {
+            double length = LaneUtils::CalculateLaneLength(pair.second);
+            double linearity = LaneUtils::CalculateLaneLinearity(pair.second);
+            lane_metrics.push_back({pair.first, length, linearity});
+            total_points += pair.second.points.size();
+        }
 
-        int trim_front_count = 0;
-        int trim_back_count = 0;
+        // 2. Build point cloud for KD-Tree
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        std::vector<PointSourceInfo> cloud_meta;
+        std::map<int, int> lane_start_indices;
 
-        // --- [Front Trimming] 앞에서부터 안쪽으로 ---
-        for (int i = 0; i < n_points; ++i) {
-            pcl::PointXYZ query_pt;
-            query_pt.x = my_lane.points[i].x;
-            query_pt.y = my_lane.points[i].y;
-            query_pt.z = my_lane.points[i].z;
+        cloud->reserve(total_points);
+        cloud_meta.reserve(total_points);
 
-            std::vector<int> idxs;
-            std::vector<float> dists;
-            bool should_remove = false;
+        int current_global_index = 0;
+        for (const auto& pair : global_map) {
+            int lane_id = pair.first;
+            const Lane& lane = pair.second;
 
-            if (kdtree.radiusSearch(query_pt, OVERLAP_RADIUS, idxs, dists) > 0) {
-                for (int neighbor_idx : idxs) {
-                    int other_id = cloud_info[neighbor_idx].lane_id;
-                    if (other_id == my_id) continue; // 내 점은 무시
+            lane_start_indices[lane_id] = current_global_index;
+            for (int i = 0; i < lane.points.size(); ++i) {
+                const auto& p = lane.points[i];
 
-                    double my_linearity = lane_linearities[my_id];
-                    double other_linearity = lane_linearities[other_id];
+                pcl::PointXYZ pt;
+                pt.x = p.x; pt.y = p.y; pt.z = p.z;
 
-                    if (other_linearity > my_linearity + LINEARITY_TOLERANCE) {
-                        should_remove = true;
-                    }
-                    else if (std::abs(other_linearity - my_linearity) < LINEARITY_TOLERANCE) {
-                        // 선형성이 비슷할 때 길이 비교
-                        double my_len = lane_lengths[my_id];
-                        double other_len = lane_lengths[other_id];
-
-                        // 판단: 상대가 더 길거나, 길이가 같은데 상대 ID가 더 작으면 내가 양보(삭제)
-                        // (ID 비교는 Tie-breaking: 일관된 결과를 위해)
-                        if (other_len > my_len) {
-                            should_remove = true; 
-                        } else if (std::abs(other_len - my_len) < 1e-3 && other_id < my_id) {
-                        should_remove = true;
-                        }
-                    }
-
-                    if (should_remove) break;
-                }
-            }
-
-            if (should_remove) {
-                trim_front_count++;
-            } else {
-                // 겹치지 않는 점이 나오면, 즉시 중단 (중간은 자르지 않음)
-                break;
+                cloud->push_back(pt);
+                cloud_meta.push_back({lane_id, i});
+                current_global_index++;
             }
         }
 
-        // 만약 앞에서 다 지워졌다면 뒤는 볼 필요 없음
-        if (trim_front_count >= n_points) {
-            lanes_to_remove.push_back(my_id);
-            continue; 
-        }
+        // 3. Deletion flags
+        std::vector<bool> is_point_removed(total_points, false);
 
-        // --- [Back Trimming] 뒤에서부터 안쪽으로 ---
-        // (앞에서 지워질 예정인 인덱스 전까지만 검사)
-        for (int i = n_points - 1; i >= trim_front_count; --i) {
-            pcl::PointXYZ query_pt;
-            query_pt.x = my_lane.points[i].x;
-            query_pt.y = my_lane.points[i].y;
-            query_pt.z = my_lane.points[i].z;
+        // 4. KD-Tree setup
+        pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+        kdtree.setInputCloud(cloud);
 
-            std::vector<int> idxs;
-            std::vector<float> dists;
-            bool should_remove = false;
+        // 5. Sort lanes by linearity and length
+        std::sort(lane_metrics.begin(), lane_metrics.end(), [LINEARITY_TOLERANCE](const LaneMetric& a, const LaneMetric& b) {
+            if (std::abs(a.linearity - b.linearity) > LINEARITY_TOLERANCE) {
+                return a.linearity < b.linearity; // Higher linearity first
+            }
+            if (std::abs(a.length - b.length) > 1) {
+                return a.length < b.length; // Longer length first
+            }
+            return a.id < b.id; // If equal, smaller ID first
+        });
 
-            if (kdtree.radiusSearch(query_pt, OVERLAP_RADIUS, idxs, dists) > 0) {
-                for (int neighbor_idx : idxs) {
-                    int other_id = cloud_info[neighbor_idx].lane_id;
-                    if (other_id == my_id) continue; // 내 점은 무시
+        // 6. Check overlapping points
+        for (const auto& metric : lane_metrics) {
+            int my_id = metric.id;
+            const Lane& my_lane = global_map[my_id];
+            int my_start_global_idx = lane_start_indices[my_id];
+            int n_points = my_lane.points.size();
 
-                    double my_linearity = lane_linearities[my_id];
-                    double other_linearity = lane_linearities[other_id];
+            int trim_front_idx = 0;
+            int trim_back_idx = n_points;
 
-                    if (other_linearity > my_linearity + LINEARITY_TOLERANCE) {
+            // Front trimming
+            for (int i = 0; i < n_points; ++i) {
+                int global_idx = my_start_global_idx + i;
+                if (is_point_removed[global_idx]){
+                    trim_front_idx++;
+                    continue; // Already removed
+                };
+                std::vector<int> idxs;
+                std::vector<float> dists;
+                bool should_remove = false;
+
+                if (kdtree.radiusSearch(cloud->points[global_idx], OVERLAP_RADIUS, idxs, dists) > 0) {
+                    for (int neighbor_idx : idxs) {
+                        int other_id = cloud_meta[neighbor_idx].lane_id;
+                        if (other_id == my_id) continue; // Skip own lane
+
+                        if (is_point_removed[neighbor_idx]) continue; // Already removed
+
                         should_remove = true;
+                        break;
                     }
-                    else if (std::abs(other_linearity - my_linearity) < LINEARITY_TOLERANCE) {
-                        // 선형성이 비슷할 때 길이 비교
-                        double my_len = lane_lengths[my_id];
-                        double other_len = lane_lengths[other_id];
+                }
 
-                        // 판단: 상대가 더 길거나, 길이가 같은데 상대 ID가 더 작으면 내가 양보(삭제)
-                        // (ID 비교는 Tie-breaking: 일관된 결과를 위해)
-                        if (other_len > my_len) {
-                            should_remove = true; 
-                        } else if (std::abs(other_len - my_len) < 1e-3 && other_id < my_id) {
+                if (should_remove) {
+                    is_point_removed[global_idx] = true;
+                    trim_front_idx++;
+                } else {
+                    break; // Stop at first non-overlapping point
+                }
+            }
+
+            // If fully trimmed before back trimming
+            if(trim_front_idx >= trim_back_idx) continue;
+
+            // Back trimming
+            for (int i = n_points - 1; i >= trim_front_idx; --i) {
+                int global_idx = my_start_global_idx + i;
+                if (is_point_removed[global_idx]){
+                    trim_back_idx--;
+                    continue; // Already removed
+                };
+
+                std::vector<int> idxs;
+                std::vector<float> dists;
+                bool should_remove = false;
+
+                if (kdtree.radiusSearch(cloud->points[global_idx], OVERLAP_RADIUS, idxs, dists) > 0) {
+                    for (int neighbor_idx : idxs) {
+                        int other_id = cloud_meta[neighbor_idx].lane_id;
+                        if (other_id == my_id) continue; // Skip own lane
+
+                        if (is_point_removed[neighbor_idx]) continue; // Already removed
+
                         should_remove = true;
-                        }
+                        break;
                     }
+                }
 
-                    if (should_remove) break;
+                if (should_remove) {
+                    is_point_removed[global_idx] = true;
+                    trim_back_idx--;
+                } else {
+                    break; // Stop at first non-overlapping point
                 }
             }
 
-            if (should_remove) {
-                trim_back_count++;
-            } else {
-                break; // 겹치지 않는 점 나오면 중단
+        }
+
+        // 7. Remove empty lanes & trimmed points
+        std::vector<int> empty_lanes;
+
+        for (auto&pair : global_map) {
+            int id = pair.first;
+            Lane& lane = pair.second;
+            int start_idx = lane_start_indices[id];
+
+            std::vector<Point6D> survived_points;
+            survived_points.reserve(lane.points.size());
+
+            for (int i = 0; i < lane.points.size(); ++i) {
+                int global_idx = start_idx + i;
+                if (!is_point_removed[global_idx]) {
+                    survived_points.push_back(lane.points[i]);
+                }
+            }
+
+            lane.points = survived_points;
+
+            if (lane.points.size() < 2) {
+                empty_lanes.push_back(id);
             }
         }
 
-        // 5. 실제 Trimming 적용
-        if (trim_front_count > 0 || trim_back_count > 0) {
-            // 전체가 다 잘려나가는 경우
-            if (trim_front_count + trim_back_count >= n_points) {
-                lanes_to_remove.push_back(my_id);
-            } else {
-                // Vector erase 사용
-                // 뒤쪽 삭제
-                if (trim_back_count > 0) {
-                    my_lane.points.erase(my_lane.points.end() - trim_back_count, my_lane.points.end());
-                }
-                // 앞쪽 삭제
-                if (trim_front_count > 0) {
-                    my_lane.points.erase(my_lane.points.begin(), my_lane.points.begin() + trim_front_count);
-                }
-            }
+        for (int id : empty_lanes) {
+            global_map.erase(id);
         }
-    }
-
-    // 6. 빈 Lane 삭제
-    for (int id : lanes_to_remove) {
-        global_map.erase(id);
     }
 }
-} // namespace LaneCleaner

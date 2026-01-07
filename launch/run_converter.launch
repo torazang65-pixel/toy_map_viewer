@@ -1,8 +1,10 @@
 <launch>
     <arg name="pkg_name" default="toy_map_viewer" />
     <arg name="start_idx" default="20000" />
+    <arg name="end_idx" default="21000" />
     <arg name="count" default="1" />
     <arg name="crop_mode" default="true" />
+    <arg name="random_index" default="false" />
     <arg name="input_path" default="data/issue/global_maps/" />
     <arg name="output_path" default="data/issue/converted_bin/" />
 
@@ -20,11 +22,12 @@
     <node pkg="$(arg pkg_name)" type="map_converter_node" name="map_converter" output="screen">
         <param name="package_name" value="$(arg pkg_name)" />
         <param name="start_index" value="$(arg start_idx)" />
+        <param name="end_index" value="$(arg end_idx)" />
         <param name="load_count" value="$(arg count)" />
         <param name="input_folder" value="$(arg input_path)" />
         <param name="output_folder" value="$(arg output_path)" />
         <param name="crop_mode" value="$(arg crop_mode)" />
-
+        <param name="random_index" value="$(arg random_index)" />
         <param name="crop_size" value="$(arg crop_size)"/>
         
         <param name="overlap_radius" value="$(arg overlap_radius)"/>

@@ -121,10 +121,12 @@ int main(int argc, char** argv) {
     // [Map Config]
     nh.param<std::string>("package_name", package_name, "toy_map_viewer");
     nh.param<int>("start_index", lane_config.start_index, 20000);
+    nh.param<int>("end_index", lane_config.end_index, 21000);
     nh.param<int>("load_count", lane_config.load_count, 1);
     nh.param<std::string>("input_folder", input_folder_name, "data/issue/global_maps/");
     nh.param<std::string>("output_folder", output_folder_name, "data/issue/output_bin/");
     nh.param<bool>("crop_mode", lane_config.crop_mode, true);
+    nh.param<bool>("random_index", lane_config.random_index, false);
 
     // [Lane Cleaner Config]
     nh.param<double>("overlap_radius", lane_config.overlap_radius, 0.3);
@@ -143,7 +145,21 @@ int main(int argc, char** argv) {
     }
     ROS_INFO("========================================");
 
-    int start_index = lane_config.start_index;
+    bool random_index = lane_config.random_index;
+    int start_index;
+    int range = lane_config.end_index - lane_config.start_index;
+    if(random_index){
+        if(range >0 ){
+            ROS_INFO("Random Index Mode ON: Selecting start index between %d and %d", lane_config.start_index, lane_config.end_index -1);
+            srand(time(0));
+            start_index = lane_config.start_index + (rand() % range);
+        } else {
+            ROS_WARN("Invalid range for random index selection. Check start_index and end_index parameters.");
+            start_index = lane_config.start_index;
+        }
+    } else {
+        start_index = lane_config.start_index;
+    }
     int load_count = lane_config.load_count;
     bool crop_mode = lane_config.crop_mode;
 

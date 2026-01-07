@@ -6,8 +6,10 @@ struct LaneConfig {
     //Map Convereter Node
     double crop_size = 300.0;
     int start_index = 20000;
+    int end_index = 21000;
     int load_count = 1;
     bool crop_mode = true;
+    bool random_index = false;
 
     //Lane Cleaner
     double overlap_radius = 0.3; // meters
