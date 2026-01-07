@@ -16,7 +16,7 @@
     <arg name="w_dist" default="1.0" />
     <arg name="w_angle" default="5.0" />
 
-
+ 
     <node pkg="$(arg pkg_name)" type="map_converter_node" name="map_converter" output="screen">
         <param name="package_name" value="$(arg pkg_name)" />
         <param name="start_index" value="$(arg start_idx)" />
