@@ -15,12 +15,11 @@ public:
     CoordinateConverter();
     ~CoordinateConverter() = default;
 
-    // 변환 프로세스 실행 함수
     void run();
 
 private:
     // 단일 프레임 처리 함수
-    bool processFrame(int sensor_id, int frame_index, Lane& out_lane);
+    bool processFrame(int sensor_id, int frame_index, LidarFrame& out_lane);
 
     // 유틸리티: JSON 및 PCD 경로 생성
     std::string getJsonPath(int sensor_id, int frame_index);
@@ -37,6 +36,4 @@ private:
     std::string base_dir_;
     std::string output_dir_;
     int sensor_id_;
-    int start_index_;
-    int load_count_;
 };

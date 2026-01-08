@@ -43,3 +43,32 @@ inline void saveToBin(const std::string& filename, const std::map<int, Lane>& ma
     out.close();
     std::cout << ">>> 저장 완료: " << filename << std::endl;
 }
+
+inline void saveLidarToBin(std::string& filename, const std::map<int, LidarFrame>& frames) {
+    std::ofstream out(filename, std::ios::binary);
+    if (!out.is_open()) {
+        std::cerr << "파일 생성 실패: " << filename << std::endl;
+        return;
+    }
+
+    uint32_t cluster_num = static_cast<uint32_t>(frames.size());
+    out.write(reinterpret_cast<const char*>(&cluster_num), sizeof(uint32_t));
+
+    for (const auto& pair : frames) {
+        const LidarFrame& frame = pair.second;
+        
+        int32_t id = frame.id;
+        uint32_t p_num = static_cast<uint32_t>(frame.points.size());
+
+        out.write(reinterpret_cast<const char*>(&id), sizeof(int32_t));
+        out.write(reinterpret_cast<const char*>(&p_num), sizeof(uint32_t));
+
+        for (const auto& pt : frame.points) {
+            out.write(reinterpret_cast<const char*>(&pt.x), sizeof(float));
+            out.write(reinterpret_cast<const char*>(&pt.y), sizeof(float));
+            out.write(reinterpret_cast<const char*>(&pt.z), sizeof(float));
+        }
+    }
+    out.close();
+    std::cout << ">>> Lidar 저장 완료: " << filename << std::endl;
+}

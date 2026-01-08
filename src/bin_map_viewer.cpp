@@ -55,6 +55,7 @@ public:
         menu_handle_ = menu_handler_.insert("Explicit Lane", boost::bind(&BinMapViewer::processFeedback, this, _1));
 
         loadAllSequences(nh);
+        loadLidarSequences(nh);
     }
 
     bool fileExists(const std::string& name) {
@@ -141,6 +142,29 @@ public:
             seq_idx++;
         }
         server_.applyChanges(); 
+    }
+
+    void loadLidarSequences(ros::NodeHandle& nh) {
+        int seq_idx = 0;
+        while(true) {
+            std::string filename = "lidar_seq_" + std::to_string(seq_idx) + ".bin";
+            std::string full_path = base_dir_ + filename;
+
+            if (!fileExists(full_path)) {
+                if (seq_idx > 0) ROS_INFO("Finished loading Lidar sequence files up to index %d.", seq_idx - 1);
+                else ROS_WARN("No Lidar sequence files found in %s", base_dir_.c_str());
+                break;
+            }
+            ROS_INFO("Found Lidar file: %s", filename.c_str());
+
+            std::string topic_name = "/lidar_viz/seq_" + std::to_string(seq_idx);
+            ros::Publisher pub = nh.advertise<visualization_msgs::MarkerArray>(topic_name, 1, true);
+            publishers_.push_back(pub);
+
+            processLidarFile(full_path, pub, seq_idx);
+            seq_idx++;
+        }
+        server_.applyChanges();
     }
 
     void processFile(const std::string& path, ros::Publisher& pub, int seq_idx) {
@@ -257,6 +281,61 @@ public:
         pub.publish(line_markers_msg);
     }
 
+    void processLidarFile(const std::string& path, ros::Publisher& pub, int seq_idx) {
+        std::ifstream ifs(path, std::ios::binary);
+        if (!ifs.is_open()) return;
+
+        uint32_t cluster_num = 0;
+        ifs.read(reinterpret_cast<char*>(&cluster_num), 4);
+        
+        visualization_msgs::MarkerArray msg;
+        
+        visualization_msgs::Marker big_marker;
+        big_marker.header.frame_id = "map";
+        big_marker.header.stamp = ros::Time::now();
+        big_marker.ns = "lidar_merged_" + std::to_string(seq_idx);
+        big_marker.id = 0; // 하나뿐이므로 ID 0
+        big_marker.type = visualization_msgs::Marker::POINTS;
+        big_marker.action = visualization_msgs::Marker::ADD;
+        
+        big_marker.pose.orientation.w = 1.0;
+        
+        big_marker.scale.x = 0.05; // 점 크기
+        big_marker.scale.y = 0.05;
+        big_marker.color.r = 0.9;  // 밝은 회색/흰색
+        big_marker.color.g = 0.9; 
+        big_marker.color.b = 0.9; 
+        big_marker.color.a = 0.8; 
+
+        for (uint32_t i = 0; i < cluster_num; ++i) {
+            int32_t id;
+            uint32_t point_num;
+            
+            ifs.read(reinterpret_cast<char*>(&id), 4);
+            ifs.read(reinterpret_cast<char*>(&point_num), 4);
+
+            for (uint32_t j = 0; j < point_num; ++j) {
+                float x, y, z;
+                ifs.read(reinterpret_cast<char*>(&x), 4);
+                ifs.read(reinterpret_cast<char*>(&y), 4);
+                ifs.read(reinterpret_cast<char*>(&z), 4);
+
+                geometry_msgs::Point p;
+                p.x = x - offset_x_; 
+                p.y = y - offset_y_;
+                p.z = z - offset_z_;
+                
+                big_marker.points.push_back(p);
+            }
+        }
+        
+        if (!big_marker.points.empty()) {
+            msg.markers.push_back(big_marker);
+            pub.publish(msg);
+            ROS_INFO("Published merged lidar cloud with %lu points", big_marker.points.size());
+        }
+    }
+    
     void spin() {
         ros::spin();
     }
