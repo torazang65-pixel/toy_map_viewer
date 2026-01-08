@@ -13,6 +13,9 @@
 #include <sys/stat.h>
 #include <map>
 
+#include <rf_tf_broadcaster/sensor_tf_broadcaster.h>
+
+
 // (색상 함수들 - 기존 유지)
 static uint32_t hashId(int id) {
     uint32_t x = id; x = x * 2654435761; x = ((x >> 16) ^ x) * 0x45d9f3b; x = ((x >> 16) ^ x) * 0x45d9f3b; x = (x >> 16) ^ x; return x;

@@ -12,7 +12,10 @@ find_package(catkin REQUIRED COMPONENTS
   interactive_markers
   pcl_ros
   pcl_conversions
+  rf_tf_broadcaster
 )
+
+find_package(OpenCV REQUIRED)
 
 catkin_package()
 
@@ -20,6 +23,7 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
 )
 
 add_definitions(${PCL_DEFINITIONS})
@@ -37,5 +41,6 @@ add_executable(bin_map_viewer src/bin_map_viewer.cpp)
 target_link_libraries(map_converter_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
 )
 target_link_libraries(bin_map_viewer ${catkin_LIBRARIES})
