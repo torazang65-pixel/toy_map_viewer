@@ -1,5 +1,6 @@
 #include "toy_map_viewer/CoordinateConverter.h"
 #include "toy_map_viewer/BinSaver.h" // saveToBin 함수 사용
+#include <rf_tf_broadcaster/sensor_tf_broadcaster.h>
 
 #include <ros/package.h>
 #include <iostream>
