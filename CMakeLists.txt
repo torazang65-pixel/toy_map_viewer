@@ -37,10 +37,22 @@ add_executable(map_converter_node
 )
 add_executable(bin_map_viewer src/bin_map_viewer.cpp)
 
+add_executable(coordinate_converter_node
+  src/coordinate_converter_node.cpp
+  src/CoordinateConverter.cpp
+)
+
 # 라이브러리 링크
 target_link_libraries(map_converter_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${OpenCV_LIBRARIES}
 )
+
+target_link_libraries(coordinate_converter_node
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+)
+
 target_link_libraries(bin_map_viewer ${catkin_LIBRARIES})

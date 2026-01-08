@@ -1,0 +1,42 @@
+#pragma once
+
+#include <ros/ros.h>
+#include <string>
+#include <vector>
+#include <map>
+#include <Eigen/Dense>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+
+#include "toy_map_viewer/DataTypes.h" // Lane, Point6D 정의 포함
+
+class CoordinateConverter {
+public:
+    CoordinateConverter();
+    ~CoordinateConverter() = default;
+
+    // 변환 프로세스 실행 함수
+    void run();
+
+private:
+    // 단일 프레임 처리 함수
+    bool processFrame(int sensor_id, int frame_index, Lane& out_lane);
+
+    // 유틸리티: JSON 및 PCD 경로 생성
+    std::string getJsonPath(int sensor_id, int frame_index);
+    std::string getPcdPath(int sensor_id, int frame_index);
+
+    // 유틸리티: JSON의 Quaternion을 Eigen Matrix로 변환
+    Eigen::Matrix4f getTransformMatrix(double x, double y, double z, 
+                                       double q0, double q1, double q2, double q3);
+
+private:
+    ros::NodeHandle nh_;
+    
+    // 파라미터 변수
+    std::string base_dir_;
+    std::string output_dir_;
+    int sensor_id_;
+    int start_index_;
+    int load_count_;
+};
