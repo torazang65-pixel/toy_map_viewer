@@ -16,15 +16,18 @@
 #include <filesystem>
 #include <vector>
 #include <algorithm>
+#include <string>
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-CoordinateConverter::CoordinateConverter() : nh_("~") {
+CoordinateConverter::CoordinateConverter() : nh_("~"), tf_listener_(tf_buffer_) {
     // 1. 파라미터 로드
     std::string package_name;
     nh_.param<std::string>("package_name", package_name, "toy_map_viewer");
     nh_.param<int>("sensor_id", sensor_id_, 1); // 예: sensor/1/
+    nh_.param<std::string>("sensor_frame", sensor_frame_id_, "pandar64_0");
+    nh_.param<std::string>("vehicle_frame", vehicle_frame_id_, "pcra");
     
     // *참고: start_index, load_count는 이제 사용하지 않고 전체 파일을 스캔합니다.
     
@@ -87,6 +90,7 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index, LidarFram
         return false;
     }
 
+    // std::string zone_id = data["frame_id"]; // 곧 구현 예정
     double tx = data["x"];
     double ty = data["y"];
     double tz = data["z"];
@@ -98,21 +102,31 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index, LidarFram
     Eigen::Matrix4f transform = getTransformMatrix(tx, ty, tz, q0, q1, q2, q3);
 
     // 2. PCD 파일 로드
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    if (pcl::io::loadPCDFile<pcl::PointXYZ>(pcd_path, *cloud) == -1) {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_sensor(new pcl::PointCloud<pcl::PointXYZ>);
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>(pcd_path, *cloud_sensor) == -1) {
         ROS_WARN("Failed to read PCD: %s", pcd_path.c_str());
         return false;
     }
 
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_vehicle(new pcl::PointCloud<pcl::PointXYZ>);
+    try {
+        geometry_msgs::TransformStamped transform_stamped;
+        transform_stamped = tf_buffer_.lookupTransform(vehicle_frame_id_, sensor_frame_id_, ros::Time(0), ros::Duration(1.0));
+        pcl_ros::transformPointCloud(*cloud_sensor, *cloud_vehicle, transform_stamped.transform);
+    } catch (tf2::TransformException &ex) {
+        ROS_WARN("TF Error: %s", ex.what());
+        return false;
+    }
+
     // 3. 좌표 변환
-    pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::transformPointCloud(*cloud, *transformed_cloud, transform);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_zone(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::transformPointCloud(*cloud_vehicle, *cloud_zone, transform);
 
     // 4. 결과 저장
     out_frame.id = frame_index;
-    out_frame.points.reserve(transformed_cloud->points.size());
+    out_frame.points.reserve(cloud_zone->points.size());
 
-    for (const auto& pt : transformed_cloud->points) {
+    for (const auto& pt : cloud_zone->points) {
         LidarPoint lidar_point;
         lidar_point.x = pt.x;
         lidar_point.y = pt.y;

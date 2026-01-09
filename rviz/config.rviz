@@ -8,8 +8,6 @@ Panels:
         - /Status1
         - /MarkerArray1
         - /MarkerArray2
-        - /MarkerArray3
-        - /MarkerArray4
       Splitter Ratio: 0.5
     Tree Height: 725
   - Class: rviz/Selection
@@ -38,29 +36,13 @@ Visualization Manager:
   Class: ""
   Displays:
     - Class: rviz/MarkerArray
-      Enabled: false
-      Marker Topic: /lane_viz/seq_0
+      Enabled: true
+      Marker Topic: /lidar_viz/seq_0
       Name: MarkerArray
       Namespaces:
-        {}
+        lidar_merged_0: true
       Queue Size: 100
-      Value: false
-    - Class: rviz/MarkerArray
-      Enabled: false
-      Marker Topic: /lane_viz/seq_1
-      Name: MarkerArray
-      Namespaces:
-        {}
-      Queue Size: 100
-      Value: false
-    - Class: rviz/MarkerArray
-      Enabled: false
-      Marker Topic: /lane_viz/seq_2
-      Name: MarkerArray
-      Namespaces:
-        {}
-      Queue Size: 100
-      Value: false
+      Value: true
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /lane_viz/seq_3
@@ -71,13 +53,13 @@ Visualization Manager:
       Value: true
     - Class: rviz/InteractiveMarkers
       Enable Transparency: true
-      Enabled: true
+      Enabled: false
       Name: InteractiveMarkers
       Show Axes: false
       Show Descriptions: true
       Show Visual Aids: false
       Update Topic: /lane_points_server/update
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -106,7 +88,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 235.58761596679688
+      Distance: 265.5622863769531
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -114,17 +96,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 240.06263732910156
-        Y: 240.31402587890625
-        Z: 9.259878424927592e-06
-      Focal Shape Fixed Size: true
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
+      Pitch: 0.7853981852531433
       Target Frame: <Fixed Frame>
-      Yaw: 0.9053978323936462
+      Yaw: 0.7853981852531433
     Saved: ~
 Window Geometry:
   Displays:

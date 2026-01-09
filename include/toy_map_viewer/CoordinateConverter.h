@@ -1,5 +1,8 @@
 #pragma once
 
+#include <tf2_ros/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
 #include <ros/ros.h>
 #include <string>
 #include <vector>
@@ -7,6 +10,7 @@
 #include <Eigen/Dense>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl_ros/transforms.h>
 
 #include "toy_map_viewer/DataTypes.h" // Lane, Point6D 정의 포함
 
@@ -14,6 +18,12 @@ class CoordinateConverter {
 public:
     CoordinateConverter();
     ~CoordinateConverter() = default;
+
+    tf2_ros::Buffer tf_buffer_;
+    tf2_ros::TransformListener tf_listener_;
+
+    std::string sensor_frame_id_; // 예: "pandar"
+    std::string vehicle_frame_id_; // 예: "pcra"
 
     void run();
 

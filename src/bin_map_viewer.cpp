@@ -13,8 +13,6 @@
 #include <sys/stat.h>
 #include <map>
 
-#include <rf_tf_broadcaster/sensor_tf_broadcaster.h>
-
 
 // (색상 함수들 - 기존 유지)
 static uint32_t hashId(int id) {
