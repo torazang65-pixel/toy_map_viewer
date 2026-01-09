@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
         const auto& explicit_vals = data["roadgraph_samples/explicit"];
         // const auto& types = data["roadgraph_samples/type"]; // 필요 시 사용
 
-        std::set<int> target_types = {6,7,8,9,10,11,12,13,15};
+        std::set<int> target_types = {6,7,8,9,10,11,12,13};
 
         size_t num_points = ids.size();
 

@@ -1,0 +1,56 @@
+<launch>
+    <arg name="package_name" default="toy_map_viewer" doc="패키지 이름" />
+
+    <arg name="start_idx" default="20000" />
+    <arg name="end_idx" default="21000" />
+    <arg name="count" default="1" />
+    <arg name="crop_mode" default="false" />
+    <arg name="random_index" default="false" />
+    <arg name="input_path" default="data/issue/global_maps/" />
+    <arg name="output_path" default="data/issue/converted_bin/" />
+
+    <arg name="crop_size" default="300.0" />
+    <arg name="overlap_radius" default="0.3" />
+    <arg name="linearity_tolerance" default="0.02" />
+
+    <arg name="search_radius" default="1.5" />
+    <arg name="angle_threshold_deg" default="30.0" />
+    <arg name="w_dist" default="1.0" />
+    <arg name="w_angle" default="5.0" />
+
+    <arg name="sensor_id"      default="20000"       doc="Sensor ID to process" />
+    <arg name="sensor_frame"   default="pandar64_0"  doc="TF frame of the sensor" />
+    <arg name="vehicle_frame"  default="pcra"        doc="TF frame of the vehicle" />
+
+    <node pkg="rf_tf_broadcaster" type="sensor_tf_broadcaster_node" name="sensor_tf_broadcaster" output="screen">
+        <param name="sensor_id" value="$(arg sensor_id)" />
+    </node>
+
+    <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen"/>
+
+    <node pkg="$(arg package_name)" type="unified_converter_node" name="unified_converter" output="screen">
+        
+        <param name="package_name" value="$(arg package_name)" />
+
+        <param name="start_index" value="$(arg start_idx)" />
+        <param name="end_index" value="$(arg end_idx)" />
+        <param name="load_count" value="$(arg count)" />
+        <param name="input_folder" value="$(arg input_path)" />
+        <param name="output_folder" value="$(arg output_path)" />
+        <param name="crop_mode" value="$(arg crop_mode)" />
+        <param name="random_index" value="$(arg random_index)" />
+        <param name="crop_size" value="$(arg crop_size)"/>
+        
+        <param name="overlap_radius" value="$(arg overlap_radius)"/>
+        <param name="linearity_tolerance" value="$(arg linearity_tolerance)"/>
+        
+        <param name="search_radius" value="$(arg search_radius)"/>
+        <param name="angle_threshold_deg" value="$(arg angle_threshold_deg)"/>
+        <param name="w_dist" value="$(arg w_dist)"/>
+        <param name="w_angle" value="$(arg w_angle)"/>
+
+        <param name="sensor_id"     value="$(arg sensor_id)" />
+        <param name="sensor_frame"  value="$(arg sensor_frame)" />
+        <param name="vehicle_frame" value="$(arg vehicle_frame)" />
+    </node>
+</launch>

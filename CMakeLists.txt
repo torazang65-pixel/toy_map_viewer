@@ -42,6 +42,15 @@ add_executable(coordinate_converter_node
   src/CoordinateConverter.cpp
 )
 
+add_executable(unified_converter_node
+  src/unified_converter_node.cpp
+  src/MapConverter.cpp
+  src/LaneUtils.cpp
+  src/LaneCleaner.cpp
+  src/LaneMerger.cpp
+  src/CoordinateConverter.cpp
+)
+
 # 라이브러리 링크
 target_link_libraries(map_converter_node
   ${catkin_LIBRARIES}
@@ -50,6 +59,12 @@ target_link_libraries(map_converter_node
 )
 
 target_link_libraries(coordinate_converter_node
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+)
+
+target_link_libraries(unified_converter_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${OpenCV_LIBRARIES}
