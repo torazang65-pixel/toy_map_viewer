@@ -113,20 +113,17 @@ int main(int argc, char** argv) {
     ros::NodeHandle nh("~");
 
     std::string package_name;
+    std::string file_name; // 추가
     std::string input_folder_name;
     std::string output_folder_name;
-
     LaneConfig lane_config;
 
-    // [Map Config]
     nh.param<std::string>("package_name", package_name, "toy_map_viewer");
-    nh.param<int>("start_index", lane_config.start_index, 20000);
-    nh.param<int>("end_index", lane_config.end_index, 21000);
+    nh.param<std::string>("file_name", file_name, "20032"); // 추가
     nh.param<int>("load_count", lane_config.load_count, 1);
     nh.param<std::string>("input_folder", input_folder_name, "data/issue/global_maps/");
     nh.param<std::string>("output_folder", output_folder_name, "data/issue/output_bin/");
     nh.param<bool>("crop_mode", lane_config.crop_mode, true);
-    nh.param<bool>("random_index", lane_config.random_index, false);
 
     // [Lane Cleaner Config]
     nh.param<double>("overlap_radius", lane_config.overlap_radius, 0.3);
@@ -165,7 +162,7 @@ int main(int argc, char** argv) {
 
     std::string pkg_path = ros::package::getPath(package_name);
     std::string base_dir = pkg_path + "/" + input_folder_name;
-    std::string output_dir = pkg_path + "/" + output_folder_name;
+    std::string output_dir = pkg_path + "/" + output_folder_name + file_name + "/";
 
     struct stat st = {0};
     if (stat(output_dir.c_str(), &st) == -1) {
@@ -173,15 +170,20 @@ int main(int argc, char** argv) {
          system(cmd.c_str());
     }
 
-    ROS_INFO("Loading %d files from %d...", load_count, start_index);
+    ROS_INFO("Loading file: %s.json from %s", file_name.c_str(), base_dir.c_str());
 
     // --- 파일 로딩 Loop (기존과 동일) ---
-    for (int i = 0; i < load_count; ++i) {
-        int current_idx = start_index + i;
-        std::string filename = std::to_string(current_idx) + ".json";
+    for (int i = 0; i < lane_config.load_count; ++i) {
+        // file_name 파라미터를 직접 사용 (여러 개라면 규칙 필요, 여기서는 단일 파일 기준)
+        std::string current_file = (lane_config.load_count == 1) ? file_name : std::to_string(std::stoi(file_name) + i);
+        std::string filename = current_file + ".json";
+        
         std::string file_path = base_dir + filename;
         std::ifstream f(file_path);
-        if (!f.is_open()) continue;
+        if (!f.is_open()) {
+            ROS_ERROR("Failed to open: %s", file_path.c_str());
+            continue;
+        }
 
         json data;
         try { f >> data; } catch (...) { continue; }

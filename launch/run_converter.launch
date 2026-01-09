@@ -1,6 +1,6 @@
 <launch>
     <arg name="pkg_name" default="toy_map_viewer" />
-    <arg name="start_idx" default="20000" />
+    <arg name="start_idx" default="20032" />
     <arg name="end_idx" default="21000" />
     <arg name="count" default="1" />
     <arg name="crop_mode" default="true" />
@@ -21,6 +21,7 @@
  
     <node pkg="$(arg pkg_name)" type="map_converter_node" name="map_converter" output="screen">
         <param name="package_name" value="$(arg pkg_name)" />
+        <param name="file_name" value="$(arg file_name)" type="str" /> 
         <param name="start_index" value="$(arg start_idx)" />
         <param name="end_index" value="$(arg end_idx)" />
         <param name="load_count" value="$(arg count)" />

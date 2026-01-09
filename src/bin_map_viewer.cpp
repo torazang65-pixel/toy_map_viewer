@@ -12,6 +12,9 @@
 #include <array>
 #include <sys/stat.h>
 #include <map>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 // (색상 함수들 - 기존 유지)
 static uint32_t hashId(int id) {
@@ -37,10 +40,24 @@ public:
       : server_("lane_points_server") 
     {
         ros::NodeHandle nh("~");
+        std::string File_name;
+        nh.param<std::string>("file_name", File_name, "20000");
+
+        // 0.json에서 frame_id 읽기 로직 추가
+        std::string pkg_path = ros::package::getPath("toy_map_viewer");
+        std::string json_path = pkg_path + "/Raw/" + File_name + "/pandar64_0/ego_state/0.json";
         
-        std::string default_dir = ros::package::getPath("toy_map_viewer") + "/data/issue/converted_bin/";
-        nh.param<std::string>("output_dir", base_dir_, default_dir);
-        if (base_dir_.back() != '/') base_dir_ += "/";
+        dynamic_frame_id_ = "world"; 
+        std::ifstream f_json(json_path);
+        if (f_json.is_open()) {
+            json ego_data; 
+            f_json >> ego_data;
+            dynamic_frame_id_ = ego_data.value("frame_id", "world");
+            ROS_INFO("Detected Frame ID: %s", dynamic_frame_id_.c_str());
+        }
+        
+        // 전체 경로 구성: 패키지경로 + 파라미터경로 + 파일이름 + /
+        base_dir_ = ros::package::getPath("toy_map_viewer") + "/data/issue/converted_bin/" + File_name + "/";
 
         ROS_INFO("Target Directory: %s", base_dir_.c_str());
 
@@ -146,6 +163,9 @@ public:
 
         uint32_t cluster_num = 0;
         ifs.read(reinterpret_cast<char*>(&cluster_num), 4);
+
+        visualization_msgs::InteractiveMarker int_marker;
+        int_marker.header.frame_id = dynamic_frame_id_;
         
         visualization_msgs::MarkerArray line_markers_msg;
         std::string seq_str = "seq_" + std::to_string(seq_idx); 
@@ -174,12 +194,14 @@ public:
                 ifs.read(reinterpret_cast<char*>(&y), 4);
                 ifs.read(reinterpret_cast<char*>(&z), 4);
                 
-                if (!is_initialized_) {
-                    offset_x_ = x; offset_y_ = y; offset_z_ = z;
-                    is_initialized_ = true;
-                }
+                // if (!is_initialized_) {
+                //     offset_x_ = x; offset_y_ = y; offset_z_ = z;
+                //     is_initialized_ = true;
+                // }
                 geometry_msgs::Point p;
-                p.x = x - offset_x_; p.y = y - offset_y_; p.z = z - offset_z_;
+                p.x = x; 
+                p.y = y; 
+                p.z = z;
                 lane_points.push_back(p);
             }
 
@@ -189,7 +211,7 @@ public:
             std::string marker_name = seq_str + "/" + std::to_string(id);
 
             visualization_msgs::InteractiveMarker int_marker;
-            int_marker.header.frame_id = "map";
+            int_marker.header.frame_id = dynamic_frame_id_;
             int_marker.name = marker_name; 
             int_marker.description = ""; 
 
@@ -227,7 +249,7 @@ public:
             // 2. Line Marker (단순 시각화용, 라인)
             // =========================================================
             visualization_msgs::Marker line_marker;
-            line_marker.header.frame_id = "map";
+            line_marker.header.frame_id = dynamic_frame_id_;
             line_marker.header.stamp = ros::Time::now();
             line_marker.ns = "lines_" + seq_str; 
             line_marker.id = id;
@@ -268,6 +290,7 @@ private:
 
     std::vector<ros::Publisher> publishers_;
     std::string base_dir_;
+    std::string dynamic_frame_id_;
     double offset_x_, offset_y_, offset_z_;
     bool is_initialized_;
     
