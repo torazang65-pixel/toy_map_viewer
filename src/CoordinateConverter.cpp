@@ -1,6 +1,8 @@
 #include "toy_map_viewer/CoordinateConverter.h"
 #include "toy_map_viewer/BinSaver.h" // saveToBin 함수 사용
 #include <rf_tf_broadcaster/sensor_tf_broadcaster.h>
+#include <rf_tf_broadcaster/map_tf_broadcaster.h>
+#include <geometry_msgs/Point.h>
 
 #include <ros/package.h>
 #include <iostream>
@@ -21,7 +23,7 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-CoordinateConverter::CoordinateConverter() : nh_("~"), tf_listener_(tf_buffer_) {
+CoordinateConverter::CoordinateConverter() : nh_("~"), tf_listener_(tf_buffer_), base_zone_id_(""), is_base_initialized_(false) {
     // 1. 파라미터 로드
     std::string package_name;
     nh_.param<std::string>("package_name", package_name, "toy_map_viewer");
@@ -72,6 +74,30 @@ Eigen::Matrix4f CoordinateConverter::getTransformMatrix(double x, double y, doub
     return transform;
 }
 
+geometry_msgs::Point CoordinateConverter::transformPoint(
+    const std::string &source_frame,
+    const geometry_msgs::Point &input_point,
+    const std::string &target_frame
+) {
+    if(source_frame == target_frame){
+        return input_point;
+    }
+
+    geometry_msgs::Point output_point;
+
+    try{
+        geometry_msgs::TransformStamped tf_stamped;
+        tf_stamped = tf_buffer_.lookupTransform(target_frame, source_frame, ros::Time(0), ros::Duration(1.0));
+
+        tf2::doTransform(input_point, output_point, tf_stamped);
+    } catch (tf2::TransformException &ex) {
+        ROS_WARN("CoordinateConverter TF Error (%s -> %s): %s", source_frame.c_str(), target_frame.c_str(), ex.what());
+        return input_point;
+    }
+    
+    return output_point;
+}
+
 bool CoordinateConverter::processFrame(int sensor_id, int frame_index, LidarFrame& out_frame) {
     std::string json_path = getJsonPath(sensor_id, frame_index);
     std::string pcd_path = getPcdPath(sensor_id, frame_index);
@@ -90,7 +116,7 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index, LidarFram
         return false;
     }
 
-    // std::string zone_id = data["frame_id"]; // 곧 구현 예정
+    std::string zone_id_str = data["frame_id"]; // 곧 구현 예정
     double tx = data["x"];
     double ty = data["y"];
     double tz = data["z"];
@@ -98,6 +124,15 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index, LidarFram
     double q1 = data["q1"];
     double q2 = data["q2"];
     double q3 = data["q3"];
+
+    // frame_id 파싱: "region_zoneIdx" 형식 가정 (예: "SEUL_1")
+
+    if(!is_base_initialized_){
+        base_zone_id_ = zone_id_str;
+        is_base_initialized_ = true;
+        ROS_INFO("Current Zone in : %s", zone_id_str.c_str());
+        ROS_INFO("Set Base Zone ID: %s (Frame Index: %d)", base_zone_id_.c_str(), frame_index);
+    }
 
     Eigen::Matrix4f transform = getTransformMatrix(tx, ty, tz, q0, q1, q2, q3);
 
@@ -127,10 +162,24 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index, LidarFram
     out_frame.points.reserve(cloud_zone->points.size());
 
     for (const auto& pt : cloud_zone->points) {
+        geometry_msgs::Point pt_msg;
+        pt_msg.x = pt.x;
+        pt_msg.y = pt.y;
+        pt_msg.z = pt.z;
+
+        geometry_msgs::Point pt_transformed = transformPoint(zone_id_str, pt_msg, base_zone_id_);
+
         LidarPoint lidar_point;
-        lidar_point.x = pt.x;
-        lidar_point.y = pt.y;
-        lidar_point.z = pt.z;
+        lidar_point.x = pt_transformed.x;
+        lidar_point.y = pt_transformed.y;
+        lidar_point.z = pt_transformed.z;
+
+        /*
+        std::strncpy(lidar_point.region, region_str.c_str(), sizeof(lidar_point.region) - 1);
+        lidar_point.region[sizeof(lidar_point.region) - 1] = '\0';
+        lidar_point.zone_idx = zone_idx;
+        */
+
         out_frame.points.push_back(lidar_point);
     }
 

@@ -8,6 +8,8 @@
         <param name="sensor_id" value="$(arg sensor_id)" />
     </node>
 
+    <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen"/>
+
     <node pkg="toy_map_viewer" type="coordinate_converter_node" name="coordinate_converter_node" output="screen">
         <param name="package_name"  value="$(arg package_name)" />
         <param name="sensor_id"     value="$(arg sensor_id)" />

@@ -5,8 +5,7 @@
 #include <map>
 #include "DataTypes.h"
 
-
-// header-only 방식
+// Lane 데이터 저장 (기존 유지)
 inline void saveToBin(const std::string& filename, const std::map<int, Lane>& map_data) {
     std::ofstream out(filename, std::ios::binary);
     if (!out.is_open()) {
@@ -44,6 +43,7 @@ inline void saveToBin(const std::string& filename, const std::map<int, Lane>& ma
     std::cout << ">>> 저장 완료: " << filename << std::endl;
 }
 
+// [수정됨] Lidar 데이터 저장: x, y, z만 깔끔하게 저장
 inline void saveLidarToBin(std::string& filename, const std::map<int, LidarFrame>& frames) {
     std::ofstream out(filename, std::ios::binary);
     if (!out.is_open()) {
@@ -64,11 +64,12 @@ inline void saveLidarToBin(std::string& filename, const std::map<int, LidarFrame
         out.write(reinterpret_cast<const char*>(&p_num), sizeof(uint32_t));
 
         for (const auto& pt : frame.points) {
+            // 좌표값만 저장 (region, zone_idx 제거)
             out.write(reinterpret_cast<const char*>(&pt.x), sizeof(float));
             out.write(reinterpret_cast<const char*>(&pt.y), sizeof(float));
             out.write(reinterpret_cast<const char*>(&pt.z), sizeof(float));
         }
     }
     out.close();
-    std::cout << ">>> Lidar 저장 완료: " << filename << std::endl;
+    std::cout << ">>> Lidar 저장 완료(Simple): " << filename << std::endl;
 }

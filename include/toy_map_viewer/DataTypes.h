@@ -22,7 +22,8 @@ struct LidarPoint {
     float y;
     float z;
     // float intensity; // 필요시 추가
-    // std::string frame_id; // 필요시 추가
+    // char region[5];
+    // int zone_idx;
 };
 
 struct LidarFrame {

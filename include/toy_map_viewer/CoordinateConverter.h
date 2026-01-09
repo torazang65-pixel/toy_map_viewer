@@ -2,6 +2,7 @@
 
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <geometry_msgs/Point.h>
 
 #include <ros/ros.h>
 #include <string>
@@ -39,8 +40,13 @@ private:
     Eigen::Matrix4f getTransformMatrix(double x, double y, double z, 
                                        double q0, double q1, double q2, double q3);
 
+    geometry_msgs::Point transformPoint(const std::string &source_frame, const geometry_msgs::Point &input_point, const std::string &target_frame);
+
 private:
     ros::NodeHandle nh_;
+
+    std::string base_zone_id_;
+    bool is_base_initialized_;
     
     // 파라미터 변수
     std::string base_dir_;

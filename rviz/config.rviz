@@ -7,7 +7,6 @@ Panels:
         - /Global Options1
         - /Status1
         - /MarkerArray1
-        - /MarkerArray2
       Splitter Ratio: 0.5
     Tree Height: 725
   - Class: rviz/Selection
@@ -37,14 +36,6 @@ Visualization Manager:
   Displays:
     - Class: rviz/MarkerArray
       Enabled: true
-      Marker Topic: /lidar_viz/seq_0
-      Name: MarkerArray
-      Namespaces:
-        lidar_merged_0: true
-      Queue Size: 100
-      Value: true
-    - Class: rviz/MarkerArray
-      Enabled: true
       Marker Topic: /lane_viz/seq_3
       Name: MarkerArray
       Namespaces:
@@ -60,6 +51,14 @@ Visualization Manager:
       Show Visual Aids: false
       Update Topic: /lane_points_server/update
       Value: false
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /lidar_viz/seq_0
+      Name: MarkerArray
+      Namespaces:
+        lidar_merged_0: true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -88,7 +87,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 265.5622863769531
+      Distance: 293.5298767089844
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -96,17 +95,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0
+        X: 50.01401901245117
+        Y: 25.542490005493164
+        Z: -5.93744516663719e-06
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7853981852531433
+      Pitch: 0.6103984117507935
       Target Frame: <Fixed Frame>
-      Yaw: 0.7853981852531433
+      Yaw: 0.6903982758522034
     Saved: ~
 Window Geometry:
   Displays:
