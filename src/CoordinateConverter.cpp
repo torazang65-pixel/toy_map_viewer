@@ -31,17 +31,15 @@ CoordinateConverter::CoordinateConverter() : nh_("~"), tf_listener_(tf_buffer_),
     nh_.param<std::string>("sensor_frame", sensor_frame_id_, "pandar64_0");
     nh_.param<std::string>("vehicle_frame", vehicle_frame_id_, "pcra");
     
-    // *참고: start_index, load_count는 이제 사용하지 않고 전체 파일을 스캔합니다.
-    
     // 경로 설정 (프로젝트 루트 기준 data 폴더)
     std::string pkg_path = ros::package::getPath(package_name);
     base_dir_ = pkg_path + "/data/";
-    output_dir_ = pkg_path + "/data/issue/converted_bin/"; // 출력 경로
+    output_dir_ = pkg_path + "/data/issue/converted_bin/" + ; // 출력 경로
 
     // 출력 디렉토리 생성
     struct stat st = {0};
     if (stat(output_dir_.c_str(), &st) == -1) {
-         std::string cmd = "mkdir -p " + output_dir_;
+         std::string cmd = "mkdir -p " + output_dir_ + std::to_string(sensor_id_) + "/";
          system(cmd.c_str());
     }
 }

@@ -39,7 +39,7 @@ void MapConverter::loadParameters() {
     // 경로 설정
     std::string pkg_path = ros::package::getPath(package_name_);
     base_dir_ = pkg_path + "/" + input_folder_name_;
-    output_dir_ = pkg_path + "/" + output_folder_name_;
+    output_dir_ = pkg_path + "/" + output_folder_name_ + std::to_string(lane_config_.start_index) + "/";
 
     // 출력 디렉토리 생성
     struct stat st = {0};
