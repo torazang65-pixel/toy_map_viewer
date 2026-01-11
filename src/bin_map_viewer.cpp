@@ -38,8 +38,11 @@ public:
         ros::NodeHandle nh("~");
         
         std::string default_dir = ros::package::getPath("toy_map_viewer") + "/data/issue/converted_bin/";
-        nh.param<std::string>("output_dir", base_dir_, default_dir);
-        if (base_dir_.back() != '/') base_dir_ += "/";
+
+        int file_idx;
+        nh_.param<int>("file_idx", file_idx, 20000);
+
+        base_dir_ = default_dir + std::to_string(file_idx) + "/";
 
         ROS_INFO("Target Directory: %s", base_dir_.c_str());
 
