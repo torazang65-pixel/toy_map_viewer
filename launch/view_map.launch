@@ -1,9 +1,9 @@
 <launch>
-    <arg name="file_idx" default="20000" doc="Target folder index (e.g. 20000)"/>
+    <arg name="file_idx" default="20000" doc="Target folder index (e.g. 20000)" />
 
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find toy_map_viewer)/rviz/config.rviz"/>
 
     <node pkg="toy_map_viewer" type="bin_map_viewer" name="map_viewer" output="screen">
-        <param name="file_path" value="$(find toy_map_viewer)/data/issue/converted_bin/points_seq_0.bin"/>
+        <param name="file_idx" value="$(arg file_idx)"/>
     </node>
 </launch>
