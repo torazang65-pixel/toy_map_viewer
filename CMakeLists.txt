@@ -47,4 +47,7 @@ target_link_libraries(unified_converter_node
   ${OpenCV_LIBRARIES}
 )
 
-target_link_libraries(bin_map_viewer ${catkin_LIBRARIES})
+target_link_libraries(bin_map_viewer 
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
