@@ -30,12 +30,9 @@
         <param name="package_name" value="$(arg package_name)" />
 
         <param name="start_index" value="$(arg start_idx)" />
-        <param name="end_index" value="$(arg end_idx)" />
-        <param name="load_count" value="$(arg count)" />
         <param name="input_folder" value="$(arg input_path)" />
         <param name="output_folder" value="$(arg output_path)" />
         <param name="crop_mode" value="$(arg crop_mode)" />
-        <param name="random_index" value="$(arg random_index)" />
         <param name="crop_size" value="$(arg crop_size)"/>
         
         <param name="overlap_radius" value="$(arg overlap_radius)"/>
