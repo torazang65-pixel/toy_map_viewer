@@ -139,7 +139,7 @@ public:
             ros::Publisher pub = nh.advertise<visualization_msgs::MarkerArray>(topic_name, 1, true);
             publishers_.push_back(pub);
 
-            processLidarFile(full_path, pub, seq_idx);
+            processLidarFile(full_path, pub);
             seq_idx++;
         }
     }
