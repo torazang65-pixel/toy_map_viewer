@@ -27,7 +27,7 @@ CoordinateConverter::CoordinateConverter() : nh_("~"), tf_listener_(tf_buffer_),
     // 1. 파라미터 로드
     std::string package_name;
     nh_.param<std::string>("package_name", package_name, "toy_map_viewer");
-    nh_.param<int>("sensor_id", sensor_id_, 1); // 예: sensor/1/
+    nh_.param<int>("start_index", sensor_id_, 1); // 예: sensor/1/
     nh_.param<std::string>("sensor_frame", sensor_frame_id_, "pandar64_0");
     nh_.param<std::string>("vehicle_frame", vehicle_frame_id_, "pcra");
     
