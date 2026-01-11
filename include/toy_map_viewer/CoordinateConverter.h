@@ -9,7 +9,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/common/transforms.h>
-#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/approximate_voxel_grid.h>
 
 #include <string>
 #include <vector>
@@ -42,7 +42,7 @@ private:
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
 
-    pcl::PointCloud<pcl::PointXYZI>::Ptr global_map_;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr global_map_;
 
     std::string sensor_frame_id_; // 예: "pandar"
     std::string vehicle_frame_id_; // 예: "pcra"

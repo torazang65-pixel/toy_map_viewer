@@ -13,7 +13,7 @@ using json = nlohmann::json;
 CoordinateConverter::CoordinateConverter() 
     : nh_("~"), 
       tf_listener_(tf_buffer_), 
-      global_map_(new pcl::PointCloud<pcl::PointXYZI>),
+      global_map_(new pcl::PointCloud<pcl::PointXYZ>),
       is_first_frame_(true) 
 {
     // 1. 파라미터 로드
@@ -68,8 +68,8 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
     }
 
     // 3. PCD 로드 (Intensity 포함)
-    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_raw(new pcl::PointCloud<pcl::PointXYZI>);
-    if (pcl::io::loadPCDFile<pcl::PointXYZI>(pcd_path, *cloud_raw) == -1) {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_raw(new pcl::PointCloud<pcl::PointXYZ>);
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>(pcd_path, *cloud_raw) == -1) {
         ROS_WARN("Failed to read PCD: %s", pcd_path.c_str());
         return false;
     }
@@ -106,7 +106,7 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
         Eigen::Matrix4f T_final = T_s2t * T_v2s * T_s2v;
 
         // 4. 포인트 클라우드 일괄 변환 (고속)
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_transformed(new pcl::PointCloud<pcl::PointXYZI>);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_transformed(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::transformPointCloud(*cloud_raw, *cloud_transformed, T_final);
 
         // 5. 전역 맵에 누적
@@ -132,10 +132,10 @@ void CoordinateConverter::saveGlobalMap() {
 
     ROS_INFO("Filtering map with leaf size: %.2f m...", leaf_size);
 
-    pcl::PointCloud<pcl::PointXYZI>::Ptr filtered_map(new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_map(new pcl::PointCloud<pcl::PointXYZ>);
     
     if (leaf_size > 0.0) {
-        pcl::VoxelGrid<pcl::PointXYZI> voxel_filter;
+        pcl::ApproximateVoxelGrid<pcl::PointXYZ> voxel_filter;
         voxel_filter.setInputCloud(global_map_);
         voxel_filter.setLeafSize((float)leaf_size, (float)leaf_size, (float)leaf_size);
         voxel_filter.filter(*filtered_map);
@@ -143,10 +143,10 @@ void CoordinateConverter::saveGlobalMap() {
         *filtered_map = *global_map_;
     }
 
-    std::string filename = output_dir_ + "lidar_seq_map_0.bin";
+    std::string filename = output_dir_ + "lidar_seq_0.bin";
     
     saveLidarToBin(filename, filtered_map);
-    ROS_INFO(">>> Successfully saved merged map to: %s (Points: %lu)", save_path.c_str(), filtered_map->size());
+    ROS_INFO(">>> Successfully saved merged map to: %s (Points: %lu)", filename.c_str(), filtered_map->size());
 }
 
 void CoordinateConverter::run() {
