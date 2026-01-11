@@ -2,10 +2,7 @@
     <arg name="package_name" default="toy_map_viewer" doc="패키지 이름" />
 
     <arg name="start_idx" default="20000" />
-    <arg name="end_idx" default="21000" />
-    <arg name="count" default="1" />
     <arg name="crop_mode" default="false" />
-    <arg name="random_index" default="false" />
     <arg name="input_path" default="data/issue/global_maps/" />
     <arg name="output_path" default="data/issue/converted_bin/" />
 

@@ -21,12 +21,12 @@ void MapConverter::loadParameters() {
     // 파라미터 로딩
     nh_.param<std::string>("package_name", package_name_, "toy_map_viewer");
     nh_.param<int>("start_index", lane_config_.start_index, 20000);
-    nh_.param<int>("end_index", lane_config_.end_index, 21000);
-    nh_.param<int>("load_count", lane_config_.load_count, 1);
+    // nh_.param<int>("end_index", lane_config_.end_index, 21000);
+    // nh_.param<int>("load_count", lane_config_.load_count, 1); // 필요 없는 파라미터
     nh_.param<std::string>("input_folder", input_folder_name_, "data/issue/global_maps/");
     nh_.param<std::string>("output_folder", output_folder_name_, "data/issue/output_bin/");
     nh_.param<bool>("crop_mode", lane_config_.crop_mode, true);
-    nh_.param<bool>("random_index", lane_config_.random_index, false);
+    // nh_.param<bool>("random_index", lane_config_.random_index, false);
 
     nh_.param<double>("overlap_radius", lane_config_.overlap_radius, 0.3);
     nh_.param<double>("linearity_tolerance", lane_config_.linearity_tolerance, 0.02);
@@ -122,56 +122,53 @@ void MapConverter::run() {
     else ROS_INFO(">>> CROP MODE IS: OFF (False)");
     ROS_INFO("========================================");
 
-    // Random Index 처리
-    int start_index = lane_config_.start_index;
-    if (lane_config_.random_index) {
-        int range = lane_config_.end_index - lane_config_.start_index;
-        if (range > 0) {
-            srand(time(0));
-            start_index += (rand() % range);
-            ROS_INFO("Random Start Index Selected: %d", start_index);
-        }
-    }
-
     // 파일 로딩
-    ROS_INFO("Loading %d files from %d...", lane_config_.load_count, start_index);
-    for (int i = 0; i < lane_config_.load_count; ++i) {
-        int current_idx = start_index + i;
-        std::string filename = std::to_string(current_idx) + ".json";
-        std::string file_path = base_dir_ + filename;
-        std::ifstream f(file_path);
-        if (!f.is_open()) continue;
+    int current_idx = lane_config_.start_index;
+    std::string filename = std::to_string(current_idx) + ".json";
+    std::string file_path = base_dir_ + filename;
+    std::ifstream f(file_path);
 
+    ROS_INFO("Loading file: %s", file_path.c_str());
+
+    if (f.is_open()){
         json data;
-        try { f >> data; } catch (...) { continue; }
+        try {
+            f >> data;
+            const auto& ids = data["roadgraph_samples/id"];
+            const auto& xyz_flat = data["roadgraph_samples/xyz"];
+            const auto& valids = data["roadgraph_samples/valid"];
+            const auto& dir_flat = data["roadgraph_samples/dir"];
+            const auto& type = data["roadgraph_samples/type"];
+            const auto& explicit_vals = data["roadgraph_samples/explicit"];
+            
+            std::set<int> target_types = {6,7,8,9,10,11,12,13};
 
-        const auto& ids = data["roadgraph_samples/id"];
-        const auto& xyz_flat = data["roadgraph_samples/xyz"];
-        const auto& valids = data["roadgraph_samples/valid"];
-        const auto& dir_flat = data["roadgraph_samples/dir"];
-        const auto& type = data["roadgraph_samples/type"];
-        const auto& explicit_vals = data["roadgraph_samples/explicit"];
-        
-        std::set<int> target_types = {6,7,8,9,10,11,12,13};
+            for (size_t k = 0; k < ids.size(); ++k) {
+                if (valids[k] != 1) continue;
+                if (target_types.find((int)type[k]) == target_types.end()) continue;
 
-        for (size_t k = 0; k < ids.size(); ++k) {
-            if (valids[k] != 1) continue;
-            if (target_types.find((int)type[k]) == target_types.end()) continue;
-
-            int id = ids[k];
-            if (global_map_.find(id) == global_map_.end()) {
-                Lane new_lane; new_lane.id = id; 
-                new_lane.type = (int)type[k];
-                new_lane.explicit_lane = explicit_vals[k];
-                global_map_[id] = new_lane;
+                int id = ids[k];
+                if (global_map_.find(id) == global_map_.end()) {
+                    Lane new_lane; new_lane.id = id; 
+                    new_lane.type = (int)type[k];
+                    new_lane.explicit_lane = explicit_vals[k];
+                    global_map_[id] = new_lane;
+                }
+                Point6D pt;
+                pt.x = xyz_flat[3 * k]; pt.y = xyz_flat[3 * k + 1]; pt.z = xyz_flat[3 * k + 2];
+                pt.dx = dir_flat[3 * k]; pt.dy = dir_flat[3 * k + 1]; pt.dz = dir_flat[3 * k + 2];
+                global_map_[id].points.push_back(pt);
             }
-            Point6D pt;
-            pt.x = xyz_flat[3 * k]; pt.y = xyz_flat[3 * k + 1]; pt.z = xyz_flat[3 * k + 2];
-            pt.dx = dir_flat[3 * k]; pt.dy = dir_flat[3 * k + 1]; pt.dz = dir_flat[3 * k + 2];
-            global_map_[id].points.push_back(pt);
+            ROS_INFO("Original Total Lanes: %lu", global_map_.size());
+        } catch (const std::exception& e) {
+            ROS_ERROR("JSON parsing error: %s", e.what()); 
         }
+
+        
+    } else {
+        ROS_ERROR("Failed to open file: %s", file_path.c_str());
+        return;
     }
-    ROS_INFO("Original Total Lanes: %lu", global_map_.size());
 
     // 처리 및 저장
     std::map<int, Lane>* map_to_save = &global_map_;
