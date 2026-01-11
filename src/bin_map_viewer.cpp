@@ -5,6 +5,12 @@
 #include <interactive_markers/interactive_marker_server.h>
 #include <interactive_markers/menu_handler.h>
 #include <geometry_msgs/Point.h>
+
+#include <sensor_msgs/PointCloud2.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+
 #include <fstream>
 #include <vector>
 #include <string>
@@ -232,62 +238,61 @@ public:
     }
 
     // [수정됨] Lidar 파일 처리: x, y, z만 읽어서 단일 색상으로 표시
-    void processLidarFile(const std::string& path, ros::Publisher& pub, int seq_idx) {
+    void processLidarFile(const std::string& path, ros::Publisher& pub) {
         std::ifstream ifs(path, std::ios::binary);
         if (!ifs.is_open()) return;
 
-        uint32_t cluster_num = 0;
-        ifs.read(reinterpret_cast<char*>(&cluster_num), 4);
-        
-        visualization_msgs::MarkerArray msg;
-        
-        visualization_msgs::Marker big_marker;
-        big_marker.header.frame_id = "map";
-        big_marker.header.stamp = ros::Time::now();
-        big_marker.ns = "lidar_merged_" + std::to_string(seq_idx);
-        big_marker.id = 0;
-        big_marker.type = visualization_msgs::Marker::POINTS;
-        big_marker.action = visualization_msgs::Marker::ADD;
-        
-        big_marker.pose.orientation.w = 1.0;
-        
-        big_marker.scale.x = 0.05; // 점 크기
-        big_marker.scale.y = 0.05;
-        
-        // 단일 색상 설정 (밝은 회색)
-        big_marker.color.r = 0.9;
-        big_marker.color.g = 0.9; 
-        big_marker.color.b = 0.9; 
-        big_marker.color.a = 0.8; 
+        // 1. PCL PointCloud 생성
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
+        // 2. 바이너리 파싱 (BinSaver 구조: ClusterNum -> ID -> PointNum -> Points)
+        uint32_t cluster_num = 0;
+        ifs.read(reinterpret_cast<char*>(&cluster_num), sizeof(uint32_t));
+        
         for (uint32_t i = 0; i < cluster_num; ++i) {
             int32_t id;
             uint32_t point_num;
             
-            ifs.read(reinterpret_cast<char*>(&id), 4);
-            ifs.read(reinterpret_cast<char*>(&point_num), 4);
+            ifs.read(reinterpret_cast<char*>(&id), sizeof(int32_t));
+            ifs.read(reinterpret_cast<char*>(&point_num), sizeof(uint32_t));
 
+            // 포인트 읽기
             for (uint32_t j = 0; j < point_num; ++j) {
                 float x, y, z;
-                // [중요] x, y, z만 읽습니다 (BinSaver.h와 일치해야 함)
-                ifs.read(reinterpret_cast<char*>(&x), 4);
-                ifs.read(reinterpret_cast<char*>(&y), 4);
-                ifs.read(reinterpret_cast<char*>(&z), 4);
+                ifs.read(reinterpret_cast<char*>(&x), sizeof(float));
+                ifs.read(reinterpret_cast<char*>(&y), sizeof(float));
+                ifs.read(reinterpret_cast<char*>(&z), sizeof(float));
 
-                geometry_msgs::Point p;
-                p.x = x - offset_x_; 
-                p.y = y - offset_y_;
-                p.z = z - offset_z_;
-                
-                big_marker.points.push_back(p);
+                // Offset 초기화 (Lane보다 Lidar가 먼저 로드될 경우 대비)
+                if (!is_initialized_) {
+                    offset_x_ = x; offset_y_ = y; offset_z_ = z;
+                    is_initialized_ = true;
+                    ROS_INFO("Map Offset Initialized by Lidar: (%.2f, %.2f, %.2f)", offset_x_, offset_y_, offset_z_);
+                }
+
+                pcl::PointXYZ pt;
+                pt.x = x - offset_x_;
+                pt.y = y - offset_y_;
+                pt.z = z - offset_z_;
+                cloud->push_back(pt);
             }
         }
         
-        if (!big_marker.points.empty()) {
-            msg.markers.push_back(big_marker);
-            pub.publish(msg);
-            ROS_INFO("Published merged lidar cloud with %lu points", big_marker.points.size());
+        if (cloud->empty()) {
+            ROS_WARN("Loaded Lidar map is empty.");
+            return;
         }
+
+        // 3. PCL -> ROS Message 변환
+        sensor_msgs::PointCloud2 output_msg;
+        pcl::toROSMsg(*cloud, output_msg);
+        
+        output_msg.header.frame_id = "map";
+        output_msg.header.stamp = ros::Time::now();
+
+        // 4. Publish
+        pub.publish(output_msg);
+        ROS_INFO("Published merged lidar cloud via PointCloud2 (Points: %lu)", cloud->size());
     }
     
     void spin() {
