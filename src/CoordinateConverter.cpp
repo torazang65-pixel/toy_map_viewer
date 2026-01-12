@@ -13,18 +13,17 @@ using json = nlohmann::json;
 CoordinateConverter::CoordinateConverter() 
     : nh_("~"), 
       tf_listener_(tf_buffer_), 
-      global_pcd_map_(new pcl::PointCloud<pcl::PointXYZ>),
-      global_bin_map_(new pcl::PointCloud<pcl::PointXYZ>),
+      global_pcd_map_(new pcl::PointCloud<pcl::PointXYZI>),
+      global_bin_map_(new pcl::PointCloud<pcl::PointXYZI>),
       is_first_frame_(true) 
 {
     // 1. 파라미터 로드
-    std::string package_name;
     nh_.param<int>("start_index", sensor_id_, 20000);
     nh_.param<std::string>("sensor_frame", sensor_frame_id_, "pandar64_0");
     nh_.param<std::string>("vehicle_frame", vehicle_frame_id_, "pcra");
     
     // 경로 설정
-    std::string pkg_path = ros::package::getPath(package_name);
+    std::string pkg_path = ros::package::getPath("toy_map_viewer");
     base_dir_ = pkg_path + "/data/";
     sensor_dir_ = base_dir_ + "sensor/" + std::to_string(sensor_id_) + "/pandar64_0/";
     output_dir_ = pkg_path + "/data/issue/converted_bin/" + std::to_string(sensor_id_) + "/"; // 저장 경로 변경
@@ -105,25 +104,31 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
     }
 
     // 3. PCD 데이터 로드 및 변환
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_pcd(new pcl::PointCloud<pcl::PointXYZ>);
-    if (pcl::io::loadPCDFile<pcl::PointXYZ>(pcd_path, *cloud_pcd) != -1) {
-        pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_pcd(new pcl::PointCloud<pcl::PointXYZ>);
-        pcl::transformPointCloud(*cloud_pcd, *transformed_pcd, T_final);
-        *global_pcd_map_ += *transformed_pcd; // PCD 전용 맵에 누적
+    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_pcd(new pcl::PointCloud<pcl::PointXYZI>);
+    if (pcl::io::loadPCDFile<pcl::PointXYZI>(pcd_path, *cloud_pcd) != -1) {
+        pcl::PointCloud<pcl::PointXYZI>::Ptr transformed(new pcl::PointCloud<pcl::PointXYZI>);
+        pcl::transformPointCloud(*cloud_pcd, *transformed, T_final);
+        *global_pcd_map_ += *transformed;
     }
 
     // 2. BIN 처리 (cloud_raw를 cloud_bin으로 수정, ifs 선언 확인)
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_bin(new pcl::PointCloud<pcl::PointXYZ>);
-    std::ifstream ifs(bin_path, std::ios::binary); // ifs 선언
+    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_bin(new pcl::PointCloud<pcl::PointXYZI>);
+    std::ifstream ifs(bin_path, std::ios::binary);
     if (ifs.is_open()) {
         float buffer[4];
         while (ifs.read(reinterpret_cast<char*>(buffer), sizeof(float) * 4)) {
-            cloud_bin->push_back(pcl::PointXYZ(buffer[0], buffer[1], buffer[2]));
+            pcl::PointXYZI pt;
+            pt.x = buffer[0]; pt.y = buffer[1]; pt.z = buffer[2];
+            float theta = buffer[3];
+            // [voxel_builder.cpp 참고] theta 정규화
+            while (theta < 0) theta += 2 * M_PI;
+            while (theta >= M_PI) theta -= M_PI;
+            pt.intensity = theta;
+            cloud_bin->push_back(pt);
         }
         ifs.close();
-
         if (!cloud_bin->empty()) {
-            pcl::PointCloud<pcl::PointXYZ>::Ptr transformed(new pcl::PointCloud<pcl::PointXYZ>);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr transformed(new pcl::PointCloud<pcl::PointXYZI>);
             pcl::transformPointCloud(*cloud_bin, *transformed, T_final);
             *global_bin_map_ += *transformed;
         }
@@ -132,40 +137,30 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
     return true;
 }
 
-void CoordinateConverter::saveMapToFile(const pcl::PointCloud<pcl::PointXYZ>::Ptr& map, const std::string& filename) {
+void CoordinateConverter::saveMapToFile(const pcl::PointCloud<pcl::PointXYZI>::Ptr& map, const std::string& filename) {
     if (map->empty()) return;
 
-    double leaf_size;
-    nh_.param<double>("map_leaf_size", leaf_size, 0.1);
-
-    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_map(new pcl::PointCloud<pcl::PointXYZ>);
-    if (leaf_size > 0.0) {
-        pcl::ApproximateVoxelGrid<pcl::PointXYZ> voxel_filter;
-        voxel_filter.setInputCloud(map);
-        voxel_filter.setLeafSize((float)leaf_size, (float)leaf_size, (float)leaf_size);
-        voxel_filter.filter(*filtered_map);
-    } else {
-        *filtered_map = *map;
-    }
-
-    saveLidarToBin(filename, filtered_map); // BinSaver 활용
+    typename pcl::PointCloud<pcl::PointXYZI>::Ptr filtered(new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::ApproximateVoxelGrid<pcl::PointXYZI> voxel_filter;
+    voxel_filter.setInputCloud(map);
+    voxel_filter.setLeafSize(0.1f, 0.1f, 0.1f);
+    voxel_filter.filter(*filtered);
+    saveLidarToBin(filename, filtered);// BinSaver 활용
 }
 
 void CoordinateConverter::saveGlobalMaps() {
     // PCD 결과 저장
-    std::string pcd_filename = output_dir_ + "lidar_seq_0.bin";
-    saveMapToFile(global_pcd_map_, pcd_filename);
+    saveMapToFile(global_pcd_map_, output_dir_ + "lidar_seq_0.bin");
     ROS_INFO("Saved PCD Global Map to lidar_seq_0.bin");
 
     // BIN 결과 저장
-    std::string bin_filename = output_dir_ + "lidar_seq_1.bin";
-    saveMapToFile(global_bin_map_, bin_filename);
+    saveMapToFile(global_bin_map_, output_dir_ + "lidar_seq_1.bin");
     ROS_INFO("Saved BIN Global Map to lidar_seq_1.bin");
 }
 
 void CoordinateConverter::run() {
     // 1. 파일 검색
-    std::string ego_state_dir = sensor_dir_ + "ego_state/"
+    std::string ego_state_dir = sensor_dir_ + "ego_state/";
     if (!fs::exists(ego_state_dir)) {
         ROS_ERROR("Directory not found: %s", ego_state_dir.c_str());
         return;
