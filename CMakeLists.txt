@@ -4,6 +4,7 @@ project(toy_map_viewer)
 add_compile_options(-std=c++17)
 
 find_package(PCL REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -12,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   interactive_markers
   pcl_ros
   pcl_conversions
+  nlohmann_json
   rf_tf_broadcaster
 )
 
@@ -46,6 +48,7 @@ target_link_libraries(unified_converter_node
   ${PCL_LIBRARIES}
   ${OpenCV_LIBRARIES}
 )
+
 
 target_link_libraries(bin_map_viewer 
   ${catkin_LIBRARIES}
