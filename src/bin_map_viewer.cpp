@@ -141,7 +141,7 @@ public:
             uint32_t cluster_num = 0;
             ifs.read(reinterpret_cast<char*>(&cluster_num), sizeof(uint32_t));
 
-            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
 
             // CoordinateConverter에서 저장할 때 cluster_num=1로 저장했음
             for (uint32_t i = 0; i < cluster_num; ++i) {
@@ -151,16 +151,18 @@ public:
                 ifs.read(reinterpret_cast<char*>(&point_num), sizeof(uint32_t));
 
                 for (uint32_t j = 0; j < point_num; ++j) {
-                    float x, y, z;
+                    float x, y, z, intensity;
                     ifs.read(reinterpret_cast<char*>(&x), sizeof(float));
                     ifs.read(reinterpret_cast<char*>(&y), sizeof(float));
                     ifs.read(reinterpret_cast<char*>(&z), sizeof(float));
+                    ifs.read(reinterpret_cast<char*>(&intensity), sizeof(float));
 
-                    pcl::PointXYZ pt;
+                    pcl::PointXYZI pt;
                     // [중요] 정적 맵과 동일한 오프셋 적용
                     pt.x = x - offset_x_;
                     pt.y = y - offset_y_;
                     pt.z = z - offset_z_;
+                    pt.intensity = intensity;
                     cloud->push_back(pt);
                 }
             }
@@ -176,7 +178,7 @@ public:
     void playCallback(const ros::TimerEvent&) {
         if (animation_frames_.empty()) return;
 
-        pcl::PointCloud<pcl::PointXYZ> merged_cloud;
+        pcl::PointCloud<pcl::PointXYZI> merged_cloud;
 
         int batch_size = 5;
         for (int i = 0; i < batch_size; ++i){
@@ -372,7 +374,7 @@ public:
         std::ifstream ifs(path, std::ios::binary);
         if (!ifs.is_open()) return;
 
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
         uint32_t cluster_num = 0;
         ifs.read(reinterpret_cast<char*>(&cluster_num), sizeof(uint32_t));
         
@@ -394,7 +396,7 @@ public:
                     is_initialized_ = true;
                     ROS_INFO("Map Offset Initialized by Lidar: (%.2f, %.2f, %.2f)", offset_x_, offset_y_, offset_z_);
                 }
-                pcl::PointXYZ pt;
+                pcl::PointXYZI pt;
                 pt.x = x - offset_x_;
                 pt.y = y - offset_y_;
                 pt.z = z - offset_z_;
@@ -433,7 +435,7 @@ private:
     std::map<std::string, LaneProp> lane_properties_;
 
     // [추가] 애니메이션 관련 변수
-    std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> animation_frames_;
+    std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> animation_frames_;
     ros::Publisher anim_pub_;
     ros::Timer play_timer_;
     size_t current_frame_idx_;

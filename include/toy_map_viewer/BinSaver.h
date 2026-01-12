@@ -71,14 +71,15 @@ inline void saveLidarToBin(const std::string& filename, const pcl::PointCloud<pc
         float x = pt.x;
         float y = pt.y;
         float z = pt.z;
+        float intensity = pt.intensity;
         
         out.write(reinterpret_cast<const char*>(&x), sizeof(float));
         out.write(reinterpret_cast<const char*>(&y), sizeof(float));
         out.write(reinterpret_cast<const char*>(&z), sizeof(float));
         // 필요 시 Intensity 추가 가능
-        //out.write((char*)&pt.intensity, sizeof(float));
+        out.write((char*)&pt.intensity, sizeof(float));
     }
 
     out.close();
-    std::cout << ">>> Global Map 저장 완료(Merged): " << filename << " (Points: " << p_num << ")" << std::endl;
+    // std::cout << ">>> Global Map 저장 완료(Merged): " << filename << " (Points: " << p_num << ")" << std::endl;
 }
