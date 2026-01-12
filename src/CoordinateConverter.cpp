@@ -120,22 +120,20 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
     // 3. PCD 데이터 로드 및 변환
     pcl::PointCloud<PointXYZU>::Ptr cloud_pcd_u(new pcl::PointCloud<PointXYZU>);
     if (pcl::io::loadPCDFile<PointXYZU>(pcd_path, *cloud_pcd_u) != -1) {
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_pcd_i(new pcl::PointCloud<pcl::PointXYZI>);
-        
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_pcd(new pcl::PointCloud<pcl::PointXYZI>);
+
         for (const auto& pt_u : cloud_pcd_u->points) {
             pcl::PointXYZI pt_i;
             pt_i.x = pt_u.x;
             pt_i.y = pt_u.y;
             pt_i.z = pt_u.z;
-            
-            // PCD의 intensity(0~255)를 0~1.0 사이로 정규화하여 BIN 데이터와 밸런스를 맞춤
-            pt_i.intensity = static_cast<float>(pt_u.intensity) / 255.0f; 
-            
-            cloud_pcd_i->push_back(pt_i);
-        }
 
+            pt_i.intensity = static_cast<float>(pt_u.intensity)/255.0f;
+
+            cloud_pcd->push_back(pt_i);
+        }
         pcl::PointCloud<pcl::PointXYZI>::Ptr transformed(new pcl::PointCloud<pcl::PointXYZI>);
-        pcl::transformPointCloud(*cloud_pcd_i, *transformed, T_final);
+        pcl::transformPointCloud(*cloud_pcd, *transformed, T_final);
         *global_pcd_map_ += *transformed;
     }
 
@@ -151,7 +149,7 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
             // [voxel_builder.cpp 참고] theta 정규화
             while (theta < 0) theta += 2 * M_PI;
             while (theta >= M_PI) theta -= M_PI;
-            pt.intensity = theta;
+            pt.intensity = theta/4096;
             cloud_bin->push_back(pt);
         }
         ifs.close();
