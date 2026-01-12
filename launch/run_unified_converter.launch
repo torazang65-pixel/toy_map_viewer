@@ -25,8 +25,6 @@
     <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen"/>
 
     <node pkg="$(arg package_name)" type="unified_converter_node" name="unified_converter" output="screen">
-        
-        <param name="package_name" value="$(arg package_name)" />
 
         <param name="start_index" value="$(arg start_idx)" />
         <param name="input_folder" value="$(arg input_path)" />
