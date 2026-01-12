@@ -5,8 +5,10 @@
 #include <map>
 #include "DataTypes.h"
 
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 
-// header-only 방식
+// Lane 데이터 저장 (기존 유지)
 inline void saveToBin(const std::string& filename, const std::map<int, Lane>& map_data) {
     std::ofstream out(filename, std::ios::binary);
     if (!out.is_open()) {
@@ -44,31 +46,38 @@ inline void saveToBin(const std::string& filename, const std::map<int, Lane>& ma
     std::cout << ">>> 저장 완료: " << filename << std::endl;
 }
 
-inline void saveLidarToBin(std::string& filename, const std::map<int, LidarFrame>& frames) {
+// [수정됨] Lidar 데이터 저장: x, y, z만 깔끔하게 저장
+inline void saveLidarToBin(const std::string& filename, const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud) {
     std::ofstream out(filename, std::ios::binary);
     if (!out.is_open()) {
         std::cerr << "파일 생성 실패: " << filename << std::endl;
         return;
     }
 
-    uint32_t cluster_num = static_cast<uint32_t>(frames.size());
+    // Global Map은 1개의 거대한 클러스터로 취급
+    uint32_t cluster_num = 1; 
     out.write(reinterpret_cast<const char*>(&cluster_num), sizeof(uint32_t));
 
-    for (const auto& pair : frames) {
-        const LidarFrame& frame = pair.second;
+    // Frame Header 작성
+    int32_t id = 0; // ID는 0번으로 고정
+    uint32_t p_num = static_cast<uint32_t>(cloud->size());
+
+    out.write(reinterpret_cast<const char*>(&id), sizeof(int32_t));
+    out.write(reinterpret_cast<const char*>(&p_num), sizeof(uint32_t));
+
+    // Points 저장
+    for (const auto& pt : cloud->points) {
+        // PCL 포인트에서 xyz 추출 (float)
+        float x = pt.x;
+        float y = pt.y;
+        float z = pt.z;
+        // 필요 시 Intensity 추가 가능: out.write((char*)&pt.intensity, sizeof(float));
         
-        int32_t id = frame.id;
-        uint32_t p_num = static_cast<uint32_t>(frame.points.size());
-
-        out.write(reinterpret_cast<const char*>(&id), sizeof(int32_t));
-        out.write(reinterpret_cast<const char*>(&p_num), sizeof(uint32_t));
-
-        for (const auto& pt : frame.points) {
-            out.write(reinterpret_cast<const char*>(&pt.x), sizeof(float));
-            out.write(reinterpret_cast<const char*>(&pt.y), sizeof(float));
-            out.write(reinterpret_cast<const char*>(&pt.z), sizeof(float));
-        }
+        out.write(reinterpret_cast<const char*>(&x), sizeof(float));
+        out.write(reinterpret_cast<const char*>(&y), sizeof(float));
+        out.write(reinterpret_cast<const char*>(&z), sizeof(float));
     }
+
     out.close();
-    std::cout << ">>> Lidar 저장 완료: " << filename << std::endl;
+    std::cout << ">>> Global Map 저장 완료(Merged): " << filename << " (Points: " << p_num << ")" << std::endl;
 }
