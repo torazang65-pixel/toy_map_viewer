@@ -56,6 +56,7 @@ private:
     // 파라미터 변수
     std::string base_dir_;
     std::string output_dir_;
+    std::string pred_frames_dir_;
     int sensor_id_;
     bool is_first_frame_;
 };

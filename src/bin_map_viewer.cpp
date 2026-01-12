@@ -5,7 +5,7 @@
 #include <interactive_markers/interactive_marker_server.h>
 #include <interactive_markers/menu_handler.h>
 #include <geometry_msgs/Point.h>
-#include <std_msgs/Int32.h> // [추가] 인덱스 변경 메시지용
+#include <std_msgs/Int32.h>
 
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -20,7 +20,7 @@
 #include <sys/stat.h>
 #include <map>
 
-// (색상 함수들 - Lane용: 기존과 동일)
+// ... (기존 색상 함수들 hashId, hsvToRgb, generateColor 등은 그대로 유지) ...
 static uint32_t hashId(int id) {
     uint32_t x = id; x = x * 2654435761; x = ((x >> 16) ^ x) * 0x45d9f3b; x = ((x >> 16) ^ x) * 0x45d9f3b; x = (x >> 16) ^ x; return x;
 }
@@ -44,47 +44,46 @@ public:
     {
         ros::NodeHandle nh("~");
         
-        // [수정] 기본 경로 설정
         default_dir_ = ros::package::getPath("toy_map_viewer") + "/data/issue/converted_bin/";
 
         int start_file_idx;
         nh.param<int>("file_idx", start_file_idx, 20000);
 
-        // [추가] 초기화 변수 설정
         offset_x_ = 0.0; offset_y_ = 0.0; offset_z_ = 0.0;
         is_initialized_ = false;
 
         menu_handle_ = menu_handler_.insert("Explicit Lane", boost::bind(&BinMapViewer::processFeedback, this, _1));
         sub_idx_ = nh.subscribe("/change_map_idx", 1, &BinMapViewer::changeIdxCallback, this);
 
+        // [추가] 애니메이션 Publisher 및 타이머 초기화
+        anim_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/pred_animation", 1);
+        // 타이머는 loadMap 이후 데이터가 있을 때만 유효하게 동작함
+        play_timer_ = nh_.createTimer(ros::Duration(1.0), &BinMapViewer::playCallback, this);
+
         // 최초 로드
         loadMap(start_file_idx);
     }
 
-    // [추가] 토픽 콜백 함수
     void changeIdxCallback(const std_msgs::Int32::ConstPtr& msg) {
         ROS_INFO("Received request to change map index to: %d", msg->data);
         loadMap(msg->data);
     }
 
     void clearMarkers() {
-        // DELETE ALL
         visualization_msgs::MarkerArray clear_msg;
         visualization_msgs::Marker clear_marker;
-        clear_marker.action = 3;
+        clear_marker.action = 3; // DELETEALL
         clear_marker.header.frame_id = "map";
         clear_msg.markers.push_back(clear_marker);
 
         for (auto& pub : lane_publishers_){
             pub.publish(clear_msg);
         }
-
         ros::Duration(0.05).sleep();
     }
 
-    // [추가] 맵 로딩 로직을 하나로 통합 및 초기화 기능 추가
     void loadMap(int file_idx) {
-        // 1. 기존 데이터 정리 (Clear)
+        // 1. 기존 데이터 정리
         clearMarkers();
         server_.clear();
         server_.applyChanges();
@@ -94,7 +93,11 @@ public:
         lane_publishers_.clear();
         lidar_publishers_.clear();
         
-        // 오프셋 초기화 (새로운 맵은 새로운 기준점이 필요하므로)
+        // 애니메이션 데이터 초기화
+        animation_frames_.clear();
+        current_frame_idx_ = 0;
+
+        // 오프셋 초기화
         lane_properties_.clear();
         is_initialized_ = false; 
         offset_x_ = 0.0; offset_y_ = 0.0; offset_z_ = 0.0;
@@ -103,10 +106,92 @@ public:
         base_dir_ = default_dir_ + std::to_string(file_idx) + "/";
         ROS_INFO("Loading Map from: %s", base_dir_.c_str());
 
-        // 3. 시퀀스 로드
-        // Note: load함수들 내부에서 nh_ 멤버변수를 사용하도록 수정해야 함
+        // 3. 정적 맵 로드 (Lane, Lidar Global Map)
         loadAllSequences();
         loadLidarSequences();
+
+        // 4. [추가] 애니메이션 프레임 로드
+        loadAnimationData();
+    }
+
+    // [추가] 애니메이션용 개별 프레임 로드 함수
+    void loadAnimationData() {
+        // 파일 경로 패턴: pred_frames/frame_{idx}.bin
+        int frame_idx = 0;
+        
+        // 오프셋이 초기화되지 않았다면 애니메이션 로딩을 미루거나 경고 (보통 loadLidarSequences에서 초기화됨)
+        if (!is_initialized_) {
+            ROS_WARN("Map offset not initialized. Animation frames might be misaligned.");
+        }
+
+        ROS_INFO(">>> Loading Animation Frames...");
+        while (true) {
+            std::string filename = "pred_frames/frame_" + std::to_string(frame_idx) + ".bin";
+            std::string full_path = base_dir_ + filename;
+
+            if (!fileExists(full_path)) {
+                break; // 파일이 없으면 루프 종료
+            }
+
+            // 파일 읽기
+            std::ifstream ifs(full_path, std::ios::binary);
+            if (!ifs.is_open()) break;
+
+            // BinSaver 포맷 파싱: cluster_num -> id -> p_num -> points
+            uint32_t cluster_num = 0;
+            ifs.read(reinterpret_cast<char*>(&cluster_num), sizeof(uint32_t));
+
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+            // CoordinateConverter에서 저장할 때 cluster_num=1로 저장했음
+            for (uint32_t i = 0; i < cluster_num; ++i) {
+                int32_t id;
+                uint32_t point_num;
+                ifs.read(reinterpret_cast<char*>(&id), sizeof(int32_t));
+                ifs.read(reinterpret_cast<char*>(&point_num), sizeof(uint32_t));
+
+                for (uint32_t j = 0; j < point_num; ++j) {
+                    float x, y, z;
+                    ifs.read(reinterpret_cast<char*>(&x), sizeof(float));
+                    ifs.read(reinterpret_cast<char*>(&y), sizeof(float));
+                    ifs.read(reinterpret_cast<char*>(&z), sizeof(float));
+
+                    pcl::PointXYZ pt;
+                    // [중요] 정적 맵과 동일한 오프셋 적용
+                    pt.x = x - offset_x_;
+                    pt.y = y - offset_y_;
+                    pt.z = z - offset_z_;
+                    cloud->push_back(pt);
+                }
+            }
+            ifs.close();
+
+            animation_frames_.push_back(cloud);
+            frame_idx++;
+        }
+        ROS_INFO("Loaded %lu frames for animation.", animation_frames_.size());
+    }
+
+    // [추가] 타이머 콜백: 프레임 재생
+    void playCallback(const ros::TimerEvent&) {
+        if (animation_frames_.empty()) return;
+
+        pcl::PointCloud<pcl::PointXYZ> merged_cloud;
+
+        int batch_size = 5;
+        for (int i = 0; i < batch_size; ++i){
+            int idx = (current_frame_idx_ + i) % animation_frames_.size();
+            merged_cloud += *animation_frames_[idx];
+        }
+
+        sensor_msgs::PointCloud2 output_msg;
+        pcl::toROSMsg(merged_cloud, output_msg);
+        output_msg.header.frame_id = "map";
+        output_msg.header.stamp = ros::Time::now();
+
+        anim_pub_.publish(output_msg);
+
+        current_frame_idx_ = (current_frame_idx_ + batch_size) % animation_frames_.size();
     }
 
     bool fileExists(const std::string& name) {
@@ -114,6 +199,7 @@ public:
         return (stat (name.c_str(), &buffer) == 0); 
     }
 
+    // ... (processFeedback, updateMarkerVisual 함수 등은 기존 유지) ...
     void processFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr &feedback) {
         if (feedback->event_type == visualization_msgs::InteractiveMarkerFeedback::MENU_SELECT) {
             std::string name = feedback->marker_name;
@@ -147,7 +233,6 @@ public:
         server_.insert(int_marker);
     }
 
-    // [수정] 매개변수 제거하고 멤버변수 nh_ 사용
     void loadAllSequences() {
         int seq_idx = 0;
         while (true) {
@@ -169,7 +254,6 @@ public:
         server_.applyChanges(); 
     }
 
-    // [수정] 매개변수 제거하고 멤버변수 nh_ 사용
     void loadLidarSequences() {
         int seq_idx = 0;
         while(true) {
@@ -190,8 +274,8 @@ public:
         }
     }
 
-    // Lane 데이터 처리 (기존과 동일)
     void processFile(const std::string& path, ros::Publisher& pub, int seq_idx) {
+        // ... (기존 Lane processFile 내용 동일: 파일 읽고 마커 생성) ...
         std::ifstream ifs(path, std::ios::binary);
         if (!ifs.is_open()) return;
 
@@ -232,7 +316,7 @@ public:
                 p.x = x - offset_x_; p.y = y - offset_y_; p.z = z - offset_z_;
                 lane_points.push_back(p);
             }
-
+            // ... (마커 생성 로직 생략, 기존 코드 그대로 사용) ...
             // Interactive Marker (Lane)
             std::string marker_name = seq_str + "/" + std::to_string(id);
             visualization_msgs::InteractiveMarker int_marker;
@@ -283,8 +367,8 @@ public:
         pub.publish(line_markers_msg);
     }
 
-    // Lidar 파일 처리 (기존과 동일)
     void processLidarFile(const std::string& path, ros::Publisher& pub) {
+        // ... (기존 Lidar processFile 내용 동일) ...
         std::ifstream ifs(path, std::ios::binary);
         if (!ifs.is_open()) return;
 
@@ -334,19 +418,25 @@ public:
 private:
     ros::NodeHandle nh_;
     interactive_markers::InteractiveMarkerServer server_;
-    ros::Subscriber sub_idx_; // [추가] Subscriber
+    ros::Subscriber sub_idx_;
     
     interactive_markers::MenuHandler menu_handler_;
     interactive_markers::MenuHandler::EntryHandle menu_handle_;
 
     std::vector<ros::Publisher> lane_publishers_;
     std::vector<ros::Publisher> lidar_publishers_;
-    std::string default_dir_; // [추가] 기본 경로 저장
+    std::string default_dir_;
     std::string base_dir_;
     double offset_x_, offset_y_, offset_z_;
     bool is_initialized_;
     
     std::map<std::string, LaneProp> lane_properties_;
+
+    // [추가] 애니메이션 관련 변수
+    std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> animation_frames_;
+    ros::Publisher anim_pub_;
+    ros::Timer play_timer_;
+    size_t current_frame_idx_;
 };
 
 int main(int argc, char** argv) {
