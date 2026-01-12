@@ -10,6 +10,16 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
+struct PointXYZU {
+    PCL_ADD_POINT4D;
+    std::uint8_t intensity;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+} EIGEN_ALIGN16;
+
+POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZU,
+    (float, x, x)(float, y, y)(float, z, z)(std::uint8_t, intensity, intensity)
+)
+
 CoordinateConverter::CoordinateConverter() 
     : nh_("~"), 
       tf_listener_(tf_buffer_), 
@@ -123,7 +133,7 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
             cloud_pcd->push_back(pt_i);
         }
         pcl::PointCloud<pcl::PointXYZI>::Ptr transformed(new pcl::PointCloud<pcl::PointXYZI>);
-        pcl::transformPointCloud(*cloud_pcd, *transformed, T_final);
+        pcl::transformPointCloud(*cloud_pcd_i, *transformed, T_final);
         *global_pcd_map_ += *transformed;
     }
 
