@@ -8,7 +8,7 @@ find_package(PCL REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   roslib # ros::package::getPath 사용을 위해 필요
-  # std_msgs 등 필요한 패키지 추가
+  std_msgs
   interactive_markers
   pcl_ros
   pcl_conversions

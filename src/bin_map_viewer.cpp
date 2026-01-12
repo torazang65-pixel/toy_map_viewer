@@ -5,6 +5,7 @@
 #include <interactive_markers/interactive_marker_server.h>
 #include <interactive_markers/menu_handler.h>
 #include <geometry_msgs/Point.h>
+#include <std_msgs/Int32.h> // [추가] 인덱스 변경 메시지용
 
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -19,7 +20,7 @@
 #include <sys/stat.h>
 #include <map>
 
-// (색상 함수들 - Lane용)
+// (색상 함수들 - Lane용: 기존과 동일)
 static uint32_t hashId(int id) {
     uint32_t x = id; x = x * 2654435761; x = ((x >> 16) ^ x) * 0x45d9f3b; x = ((x >> 16) ^ x) * 0x45d9f3b; x = (x >> 16) ^ x; return x;
 }
@@ -43,22 +44,69 @@ public:
     {
         ros::NodeHandle nh("~");
         
-        std::string default_dir = ros::package::getPath("toy_map_viewer") + "/data/issue/converted_bin/";
+        // [수정] 기본 경로 설정
+        default_dir_ = ros::package::getPath("toy_map_viewer") + "/data/issue/converted_bin/";
 
-        int file_idx;
-        nh.param<int>("file_idx", file_idx, 20000);
+        int start_file_idx;
+        nh.param<int>("file_idx", start_file_idx, 20000);
 
-        base_dir_ = default_dir + std::to_string(file_idx) + "/";
-
-        ROS_INFO("Target Directory: %s", base_dir_.c_str());
-
+        // [추가] 초기화 변수 설정
         offset_x_ = 0.0; offset_y_ = 0.0; offset_z_ = 0.0;
         is_initialized_ = false;
 
         menu_handle_ = menu_handler_.insert("Explicit Lane", boost::bind(&BinMapViewer::processFeedback, this, _1));
+        sub_idx_ = nh.subscribe("/change_map_idx", 1, &BinMapViewer::changeIdxCallback, this);
 
-        loadAllSequences(nh);
-        loadLidarSequences(nh);
+        // 최초 로드
+        loadMap(start_file_idx);
+    }
+
+    // [추가] 토픽 콜백 함수
+    void changeIdxCallback(const std_msgs::Int32::ConstPtr& msg) {
+        ROS_INFO("Received request to change map index to: %d", msg->data);
+        loadMap(msg->data);
+    }
+
+    void clearMarkers() {
+        // DELETE ALL
+        visualization_msgs::MarkerArray clear_msg;
+        visualization_msgs::Marker clear_marker;
+        clear_marker.action = 3;
+        clear_marker.header.frame_id = "map";
+        clear_msg.markers.push_back(clear_marker);
+
+        for (auto& pub : lane_publishers_){
+            pub.publish(clear_msg);
+        }
+
+        ros::Duration(0.05).sleep();
+    }
+
+    // [추가] 맵 로딩 로직을 하나로 통합 및 초기화 기능 추가
+    void loadMap(int file_idx) {
+        // 1. 기존 데이터 정리 (Clear)
+        clearMarkers();
+        server_.clear();
+        server_.applyChanges();
+        
+        for(auto& pub : lane_publishers_) pub.shutdown();
+        for(auto& pub : lidar_publishers_) pub.shutdown();
+        lane_publishers_.clear();
+        lidar_publishers_.clear();
+        
+        // 오프셋 초기화 (새로운 맵은 새로운 기준점이 필요하므로)
+        lane_properties_.clear();
+        is_initialized_ = false; 
+        offset_x_ = 0.0; offset_y_ = 0.0; offset_z_ = 0.0;
+
+        // 2. 경로 재설정
+        base_dir_ = default_dir_ + std::to_string(file_idx) + "/";
+        ROS_INFO("Loading Map from: %s", base_dir_.c_str());
+
+        // 3. 시퀀스 로드
+        // Note: load함수들 내부에서 nh_ 멤버변수를 사용하도록 수정해야 함
+        loadAllSequences();
+        loadLidarSequences();
     }
 
     bool fileExists(const std::string& name) {
@@ -99,22 +147,21 @@ public:
         server_.insert(int_marker);
     }
 
-    void loadAllSequences(ros::NodeHandle& nh) {
+    // [수정] 매개변수 제거하고 멤버변수 nh_ 사용
+    void loadAllSequences() {
         int seq_idx = 0;
         while (true) {
             std::string filename = "points_seq_" + std::to_string(seq_idx) + ".bin";
             std::string full_path = base_dir_ + filename;
 
             if (!fileExists(full_path)) {
-                if (seq_idx > 0) ROS_INFO("Finished loading sequence files up to index %d.", seq_idx - 1);
-                else ROS_WARN("No sequence files found in %s", base_dir_.c_str());
+                if (seq_idx == 0) ROS_WARN("No Lane sequence files found in %s", base_dir_.c_str());
                 break;
             }
-            ROS_INFO("Found file: %s", filename.c_str());
-
+            
             std::string topic_name = "/lane_viz/seq_" + std::to_string(seq_idx);
-            ros::Publisher pub = nh.advertise<visualization_msgs::MarkerArray>(topic_name, 1, true);
-            publishers_.push_back(pub);
+            ros::Publisher pub = nh_.advertise<visualization_msgs::MarkerArray>(topic_name, 1, true);
+            lane_publishers_.push_back(pub);
 
             processFile(full_path, pub, seq_idx);
             seq_idx++;
@@ -122,29 +169,28 @@ public:
         server_.applyChanges(); 
     }
 
-    void loadLidarSequences(ros::NodeHandle& nh) {
+    // [수정] 매개변수 제거하고 멤버변수 nh_ 사용
+    void loadLidarSequences() {
         int seq_idx = 0;
         while(true) {
             std::string filename = "lidar_seq_" + std::to_string(seq_idx) + ".bin";
             std::string full_path = base_dir_ + filename;
 
             if (!fileExists(full_path)) {
-                if (seq_idx > 0) ROS_INFO("Finished loading Lidar sequence files up to index %d.", seq_idx - 1);
-                else ROS_WARN("No Lidar sequence files found in %s", base_dir_.c_str());
+                if (seq_idx == 0) ROS_WARN("No Lidar sequence files found in %s", base_dir_.c_str());
                 break;
             }
-            ROS_INFO("Found Lidar file: %s", filename.c_str());
-
+            
             std::string topic_name = "/lidar_viz/seq_" + std::to_string(seq_idx);
-            ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud2>(topic_name, 1, true);
-            publishers_.push_back(pub);
+            ros::Publisher pub = nh_.advertise<sensor_msgs::PointCloud2>(topic_name, 1, true);
+            lidar_publishers_.push_back(pub);
 
             processLidarFile(full_path, pub);
             seq_idx++;
         }
     }
 
-    // Lane 데이터 처리
+    // Lane 데이터 처리 (기존과 동일)
     void processFile(const std::string& path, ros::Publisher& pub, int seq_idx) {
         std::ifstream ifs(path, std::ios::binary);
         if (!ifs.is_open()) return;
@@ -237,15 +283,12 @@ public:
         pub.publish(line_markers_msg);
     }
 
-    // [수정됨] Lidar 파일 처리: x, y, z만 읽어서 단일 색상으로 표시
+    // Lidar 파일 처리 (기존과 동일)
     void processLidarFile(const std::string& path, ros::Publisher& pub) {
         std::ifstream ifs(path, std::ios::binary);
         if (!ifs.is_open()) return;
 
-        // 1. PCL PointCloud 생성
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-
-        // 2. 바이너리 파싱 (BinSaver 구조: ClusterNum -> ID -> PointNum -> Points)
         uint32_t cluster_num = 0;
         ifs.read(reinterpret_cast<char*>(&cluster_num), sizeof(uint32_t));
         
@@ -256,20 +299,17 @@ public:
             ifs.read(reinterpret_cast<char*>(&id), sizeof(int32_t));
             ifs.read(reinterpret_cast<char*>(&point_num), sizeof(uint32_t));
 
-            // 포인트 읽기
             for (uint32_t j = 0; j < point_num; ++j) {
                 float x, y, z;
                 ifs.read(reinterpret_cast<char*>(&x), sizeof(float));
                 ifs.read(reinterpret_cast<char*>(&y), sizeof(float));
                 ifs.read(reinterpret_cast<char*>(&z), sizeof(float));
 
-                // Offset 초기화 (Lane보다 Lidar가 먼저 로드될 경우 대비)
                 if (!is_initialized_) {
                     offset_x_ = x; offset_y_ = y; offset_z_ = z;
                     is_initialized_ = true;
                     ROS_INFO("Map Offset Initialized by Lidar: (%.2f, %.2f, %.2f)", offset_x_, offset_y_, offset_z_);
                 }
-
                 pcl::PointXYZ pt;
                 pt.x = x - offset_x_;
                 pt.y = y - offset_y_;
@@ -278,21 +318,13 @@ public:
             }
         }
         
-        if (cloud->empty()) {
-            ROS_WARN("Loaded Lidar map is empty.");
-            return;
-        }
+        if (cloud->empty()) return;
 
-        // 3. PCL -> ROS Message 변환
         sensor_msgs::PointCloud2 output_msg;
         pcl::toROSMsg(*cloud, output_msg);
-        
         output_msg.header.frame_id = "map";
         output_msg.header.stamp = ros::Time::now();
-
-        // 4. Publish
         pub.publish(output_msg);
-        ROS_INFO("Published merged lidar cloud via PointCloud2 (Points: %lu)", cloud->size());
     }
     
     void spin() {
@@ -302,11 +334,14 @@ public:
 private:
     ros::NodeHandle nh_;
     interactive_markers::InteractiveMarkerServer server_;
+    ros::Subscriber sub_idx_; // [추가] Subscriber
     
     interactive_markers::MenuHandler menu_handler_;
     interactive_markers::MenuHandler::EntryHandle menu_handle_;
 
-    std::vector<ros::Publisher> publishers_;
+    std::vector<ros::Publisher> lane_publishers_;
+    std::vector<ros::Publisher> lidar_publishers_;
+    std::string default_dir_; // [추가] 기본 경로 저장
     std::string base_dir_;
     double offset_x_, offset_y_, offset_z_;
     bool is_initialized_;
