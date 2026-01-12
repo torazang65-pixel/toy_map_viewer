@@ -372,32 +372,39 @@ public:
         std::ifstream ifs(path, std::ios::binary);
         if (!ifs.is_open()) return;
 
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        // 1. PointXYZ 대신 PointXYZI 사용
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
+
         uint32_t cluster_num = 0;
         ifs.read(reinterpret_cast<char*>(&cluster_num), sizeof(uint32_t));
         
         for (uint32_t i = 0; i < cluster_num; ++i) {
             int32_t id;
             uint32_t point_num;
-            
             ifs.read(reinterpret_cast<char*>(&id), sizeof(int32_t));
             ifs.read(reinterpret_cast<char*>(&point_num), sizeof(uint32_t));
 
             for (uint32_t j = 0; j < point_num; ++j) {
-                float x, y, z;
-                ifs.read(reinterpret_cast<char*>(&x), sizeof(float));
-                ifs.read(reinterpret_cast<char*>(&y), sizeof(float));
-                ifs.read(reinterpret_cast<char*>(&z), sizeof(float));
+                float buffer[4]; // x, y, z, theta를 한꺼번에 읽기 위한 버퍼
+                ifs.read(reinterpret_cast<char*>(buffer), sizeof(float) * 4);
 
                 if (!is_initialized_) {
-                    offset_x_ = x; offset_y_ = y; offset_z_ = z;
+                    offset_x_ = buffer[0]; offset_y_ = buffer[1]; offset_z_ = buffer[2];
                     is_initialized_ = true;
-                    ROS_INFO("Map Offset Initialized by Lidar: (%.2f, %.2f, %.2f)", offset_x_, offset_y_, offset_z_);
                 }
-                pcl::PointXYZ pt;
-                pt.x = x - offset_x_;
-                pt.y = y - offset_y_;
-                pt.z = z - offset_z_;
+
+                pcl::PointXYZI pt;
+                pt.x = buffer[0] - offset_x_;
+                pt.y = buffer[1] - offset_y_;
+                pt.z = buffer[2] - offset_z_;
+                
+                // 2. 4번째 값(theta)을 intensity에 할당
+                float theta = buffer[3];
+                // 필요 시 정규화 로직 추가 (0 ~ PI)
+                while (theta < 0) theta += 2 * M_PI;
+                while (theta >= M_PI) theta -= M_PI;
+                pt.intensity = theta; 
+
                 cloud->push_back(pt);
             }
         }
@@ -410,7 +417,7 @@ public:
         output_msg.header.stamp = ros::Time::now();
         pub.publish(output_msg);
     }
-    
+
     void spin() {
         ros::spin();
     }
