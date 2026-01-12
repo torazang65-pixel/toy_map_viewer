@@ -19,7 +19,6 @@ CoordinateConverter::CoordinateConverter()
 {
     // 1. 파라미터 로드
     std::string package_name;
-    nh_.param<std::string>("package_name", package_name, "toy_map_viewer");
     nh_.param<int>("start_index", sensor_id_, 20000);
     nh_.param<std::string>("sensor_frame", sensor_frame_id_, "pandar64_0");
     nh_.param<std::string>("vehicle_frame", vehicle_frame_id_, "pcra");
@@ -27,6 +26,7 @@ CoordinateConverter::CoordinateConverter()
     // 경로 설정
     std::string pkg_path = ros::package::getPath(package_name);
     base_dir_ = pkg_path + "/data/";
+    sensor_dir_ = base_dir_ + "sensor/" + std::to_string(sensor_id_) + "/pandar64_0/";
     output_dir_ = pkg_path + "/data/issue/converted_bin/" + std::to_string(sensor_id_) + "/"; // 저장 경로 변경
     pred_frames_dir_ = output_dir_ + "pred_frames/";
 
@@ -39,12 +39,12 @@ CoordinateConverter::CoordinateConverter()
     }
 }
 
-std::string CoordinateConverter::getJsonPath(int sensor_id, int frame_index) {
-    return base_dir_ + "sensor/" + std::to_string(sensor_id) + "/ego_state/" + std::to_string(frame_index) + ".json";
+std::string CoordinateConverter::getJsonPath(int frame_index) {
+    return sensor_dir_ + "ego_state/" + std::to_string(frame_index) + ".json";
 }
 
-std::string CoordinateConverter::getPcdPath(int sensor_id, int frame_index) {
-    return base_dir_ + "sensor/" + std::to_string(sensor_id) + "/pcd/" + std::to_string(frame_index) + ".pcd";
+std::string CoordinateConverter::getPcdPath(int frame_index) {
+    return sensor_dir_ + "pcd/" + std::to_string(frame_index) + ".pcd";
 }
 
 std::string CoordinateConverter::getBinPath(int sensor_id, int frame_index) {
@@ -52,8 +52,8 @@ std::string CoordinateConverter::getBinPath(int sensor_id, int frame_index) {
 }
 
 bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
-    std::string json_path = getJsonPath(sensor_id, frame_index);
-    std::string pcd_path = getPcdPath(sensor_id, frame_index);
+    std::string json_path = getJsonPath(frame_index);
+    std::string pcd_path = getPcdPath(frame_index);
     std::string bin_path = getBinPath(sensor_id, frame_index);
 
     // 1. JSON 로드
@@ -172,7 +172,7 @@ void CoordinateConverter::saveGlobalMaps() {
 
 void CoordinateConverter::run() {
     // 1. 파일 검색
-    std::string ego_state_dir = base_dir_ + "sensor/" + std::to_string(sensor_id_) + "/ego_state/";
+    std::string ego_state_dir = sensor_dir_ + "ego_state/"
     if (!fs::exists(ego_state_dir)) {
         ROS_ERROR("Directory not found: %s", ego_state_dir.c_str());
         return;
