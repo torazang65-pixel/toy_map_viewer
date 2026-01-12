@@ -65,6 +65,45 @@ namespace LaneUtils
         
         // 1. 시작점 찾기 (가장 단순화된 버전: 앞쪽 방향으로 점들이 가장 많은 점)
         int startIdx = -1;
+
+        int minBackwardCount = std::numeric_limits<int>::max();
+        int maxForwardCount = -1;
+
+        const double searchRadiusSq = 3.0 * 3.0; // 검색 반경 설정
+        const double backwardThreshold = -0.3;  // 후방 판별 임계값
+
+        for (size_t i = 0; i < remainingPoints.size(); ++i) {
+            int backwardCount = 0;
+            int forwardCount = 0;
+
+            for (size_t j = 0; j < remainingPoints.size(); ++j) {
+                if (i==j) continue;
+
+                double distSq = GetDistanceSq(remainingPoints[i], remainingPoints[j]);
+                if (distSq > searchRadiusSq) continue;
+
+                double score = GetDirectionScore(remainingPoints[i], remainingPoints[j]);
+
+                if (score < backwardThreshold) {
+                    backwardCount++;
+                } else if (score > 0.0) {
+                    forwardCount++;
+                }
+            }
+
+            if (backwardCount < minBackwardCount) {
+                minBackwardCount = backwardCount;
+                maxForwardCount = forwardCount;
+                startIdx = i;
+            } else if (backwardCount == minBackwardCount) {
+                if (forwardCount > maxForwardCount) {
+                    maxForwardCount = forwardCount;
+                    startIdx = i;
+                }
+            }
+        }
+
+        /*
         double maxScore = -1.0;
 
         for (size_t i = 0; i < remainingPoints.size(); ++i) {
@@ -80,6 +119,7 @@ namespace LaneUtils
                 startIdx = i;
             }
         }
+        */
 
         if (startIdx == -1) startIdx = 0; // fallback
 
