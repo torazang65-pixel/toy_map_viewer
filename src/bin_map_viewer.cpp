@@ -136,7 +136,7 @@ public:
             ROS_INFO("Found Lidar file: %s", filename.c_str());
 
             std::string topic_name = "/lidar_viz/seq_" + std::to_string(seq_idx);
-            ros::Publisher pub = nh.advertise<visualization_msgs::MarkerArray>(topic_name, 1, true);
+            ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud2>(topic_name, 1, true);
             publishers_.push_back(pub);
 
             processLidarFile(full_path, pub);
