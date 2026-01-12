@@ -43,11 +43,11 @@ private:
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr global_pcd_map_;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr global_bin_map_;
+    pcl::PointCloud<pcl::PointXYZI>::Ptr global_pcd_map_;
+    pcl::PointCloud<pcl::PointXYZI>::Ptr global_bin_map_;
 
     // 저장 로직을 공용으로 쓰기 위한 헬퍼 함수
-    void saveMapToFile(const pcl::PointCloud<pcl::PointXYZ>::Ptr& map, const std::string& filename);
+    void saveMapToFile(const typename pcl::PointCloud<pcl::PointXYZI>::Ptr& map, const std::string& filename);
     
     std::string sensor_frame_id_; // 예: "pandar"
     std::string vehicle_frame_id_; // 예: "pcra"
