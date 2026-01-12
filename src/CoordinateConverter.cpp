@@ -26,12 +26,16 @@ CoordinateConverter::CoordinateConverter()
     // 경로 설정
     std::string pkg_path = ros::package::getPath(package_name);
     base_dir_ = pkg_path + "/data/";
-    sensor_dir_ = base_dir_ + "sensor/" + std::to_string(sensor_id_) + "/pandar64_0/";
+    sensor_dir_ = base_dir_ + "sensor/" + std::to_string(sensor_id_) + "/";
     output_dir_ = pkg_path + "/data/issue/converted_bin/" + std::to_string(sensor_id_) + "/"; // 저장 경로 변경
+    pred_frames_dir_ = output_dir_ + "pred_frames/";
 
     // 출력 디렉토리 생성
     if (!fs::exists(output_dir_)) {
         fs::create_directories(output_dir_);
+    }
+    if(!fs::exists(pred_frames_dir_)) {
+        fs::create_directories(pred_frames_dir_);
     }
 }
 
@@ -126,6 +130,9 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
             pcl::PointCloud<pcl::PointXYZ>::Ptr transformed(new pcl::PointCloud<pcl::PointXYZ>);
             pcl::transformPointCloud(*cloud_bin, *transformed, T_final);
             *global_bin_map_ += *transformed;
+
+            std::string frame_filename = pred_frames_dir_ + "frame_" + std::to_string(frame_index) + ".bin";
+            saveLidarToBin(frame_filename, transformed);
         }
     }
 
@@ -165,7 +172,7 @@ void CoordinateConverter::saveGlobalMaps() {
 
 void CoordinateConverter::run() {
     // 1. 파일 검색
-    std::string ego_state_dir = sensor_dir_ + "ego_state/"
+    std::string ego_state_dir = sensor_dir_ + "ego_state/";
     if (!fs::exists(ego_state_dir)) {
         ROS_ERROR("Directory not found: %s", ego_state_dir.c_str());
         return;
