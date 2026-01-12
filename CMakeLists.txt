@@ -17,41 +17,40 @@ find_package(catkin REQUIRED COMPONENTS
   rf_tf_broadcaster
 )
 
+find_package(OpenCV REQUIRED)
+
 catkin_package()
 
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
 )
 
 add_definitions(${PCL_DEFINITIONS})
 
 # 실행 파일 생성
-add_executable(map_converter_node 
-  src/map_converter_node.cpp
+add_executable(bin_map_viewer src/bin_map_viewer.cpp)
+
+add_executable(unified_converter_node
+  src/unified_converter_node.cpp
+  src/MapConverter.cpp
   src/LaneUtils.cpp
   src/LaneCleaner.cpp
   src/LaneMerger.cpp
+  src/CoordinateConverter.cpp
 )
-add_executable(bin_map_viewer src/bin_map_viewer.cpp)
-add_executable(map_merge src/map_merge.cpp)
 
 # 라이브러리 링크
-target_link_libraries(map_converter_node
+target_link_libraries(unified_converter_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
-)
-target_link_libraries(bin_map_viewer ${catkin_LIBRARIES})
-target_link_libraries(map_merge
-  ${catkin_LIBRARIES} 
+  ${OpenCV_LIBRARIES}
 )
 
 
-add_executable(map_loader_node src/map_loader.cpp)
-
-# 의존성 연결
-target_link_libraries(map_loader_node
+target_link_libraries(bin_map_viewer 
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )

@@ -1,2 +1,4 @@
-# Ignore global maps related data
-data/issue/global_maps/
+# Ignore all data files
+data/
+
+src_backup/
