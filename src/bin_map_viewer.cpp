@@ -374,13 +374,7 @@ public:
         std::ifstream ifs(path, std::ios::binary);
         if (!ifs.is_open()) return;
 
-<<<<<<< HEAD
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
-=======
-        // 1. PointXYZ 대신 PointXYZI 사용
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
-
->>>>>>> 3c414eacc521d22926140a6173e5611ef4752417
         uint32_t cluster_num = 0;
         ifs.read(reinterpret_cast<char*>(&cluster_num), sizeof(uint32_t));
         
@@ -398,12 +392,6 @@ public:
                     offset_x_ = buffer[0]; offset_y_ = buffer[1]; offset_z_ = buffer[2];
                     is_initialized_ = true;
                 }
-<<<<<<< HEAD
-                pcl::PointXYZI pt;
-                pt.x = x - offset_x_;
-                pt.y = y - offset_y_;
-                pt.z = z - offset_z_;
-=======
 
                 pcl::PointXYZI pt;
                 pt.x = buffer[0] - offset_x_;
@@ -417,7 +405,6 @@ public:
                 while (theta >= M_PI) theta -= M_PI;
                 pt.intensity = theta; 
 
->>>>>>> 3c414eacc521d22926140a6173e5611ef4752417
                 cloud->push_back(pt);
             }
         }

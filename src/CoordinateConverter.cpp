@@ -133,7 +133,7 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
             cloud_pcd->push_back(pt_i);
         }
         pcl::PointCloud<pcl::PointXYZI>::Ptr transformed(new pcl::PointCloud<pcl::PointXYZI>);
-        pcl::transformPointCloud(*cloud_pcd_i, *transformed, T_final);
+        pcl::transformPointCloud(*cloud_pcd, *transformed, T_final);
         *global_pcd_map_ += *transformed;
     }
 
