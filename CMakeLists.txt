@@ -38,6 +38,8 @@ add_executable(unified_converter_node
   src/map_generator/LaneCleaner.cpp
   src/map_generator/LaneMerger.cpp
   src/map_generator/CoordinateConverter.cpp
+  src/FrameLoader.cpp
+  src/BatchSaver.cpp
 )
 
 # 라이브러리 링크

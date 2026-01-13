@@ -18,3 +18,9 @@ weight_direction: 5.0          # launch파일의 w_angle 대응
 # 좌표계 (Coordinate Converter)
 sensor_frame: "pandar64_0"
 vehicle_frame: "pcra"
+
+# 실시간 데이터 처리
+batch_size: 20
+overlap_size: 5
+line_map_output_folder: "data/issue/converted_bin/"
+converted_folder: "data/issue/converted_bin/"
