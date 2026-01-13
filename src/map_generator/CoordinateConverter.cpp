@@ -31,6 +31,7 @@ CoordinateConverter::CoordinateConverter()
     nh_.param<int>("start_index", sensor_id_, 20000);
     nh_.param<std::string>("sensor_frame", sensor_frame_id_, "pandar64_0");
     nh_.param<std::string>("vehicle_frame", vehicle_frame_id_, "pcra");
+    nh_.param<std::string>("pred_folder", pred_folder_, "issue_laneline_pred/");
     
     // 경로 설정
     std::string pkg_path = ros::package::getPath("toy_map_viewer");
@@ -57,7 +58,7 @@ std::string CoordinateConverter::getPcdPath(int frame_index) {
 }
 
 std::string CoordinateConverter::getBinPath(int sensor_id, int frame_index) {
-    return base_dir_ + "issue_laneline_pred/" + std::to_string(sensor_id) + "/pandar64_0/" + std::to_string(frame_index) + ".bin";
+    return base_dir_ + pred_folder_ + std::to_string(sensor_id) + "/pandar64_0/" + std::to_string(frame_index) + ".bin";
 }
 
 bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
@@ -149,7 +150,7 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
             // [voxel_builder.cpp 참고] theta 정규화
             while (theta < 0) theta += 2 * M_PI;
             while (theta >= M_PI) theta -= M_PI;
-            pt.intensity = theta/4096;
+            pt.intensity = theta;
             cloud_bin->push_back(pt);
         }
         ifs.close();
@@ -166,24 +167,25 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
     return true;
 }
 
-void CoordinateConverter::saveMapToFile(const pcl::PointCloud<pcl::PointXYZI>::Ptr& map, const std::string& filename) {
+void CoordinateConverter::saveMapToFile(const pcl::PointCloud<pcl::PointXYZI>::Ptr& map, const std::string& filename,bool filter_mode) {
     if (map->empty()) return;
-
-    typename pcl::PointCloud<pcl::PointXYZI>::Ptr filtered(new pcl::PointCloud<pcl::PointXYZI>);
-    pcl::ApproximateVoxelGrid<pcl::PointXYZI> voxel_filter;
-    voxel_filter.setInputCloud(map);
-    voxel_filter.setLeafSize(0.1f, 0.1f, 0.1f);
-    voxel_filter.filter(*filtered);
-    saveLidarToBin(filename, filtered);// BinSaver 활용
+    if (filter_mode) {
+        typename pcl::PointCloud<pcl::PointXYZI>::Ptr filtered(new pcl::PointCloud<pcl::PointXYZI>);
+        pcl::ApproximateVoxelGrid<pcl::PointXYZI> voxel_filter;
+        voxel_filter.setInputCloud(map);
+        voxel_filter.setLeafSize(0.3f, 0.3f, 0.3f);
+        voxel_filter.filter(*filtered);
+    }
+    saveLidarToBin(filename, map);// BinSaver 활용
 }
 
 void CoordinateConverter::saveGlobalMaps() {
     // PCD 결과 저장
-    saveMapToFile(global_pcd_map_, output_dir_ + "lidar_seq_0.bin");
+    saveMapToFile(global_pcd_map_, output_dir_ + "lidar_seq_0.bin", true);
     ROS_INFO("Saved PCD Global Map to lidar_seq_0.bin");
 
     // BIN 결과 저장
-    saveMapToFile(global_bin_map_, output_dir_ + "lidar_seq_1.bin");
+    saveMapToFile(global_bin_map_, output_dir_ + "lidar_seq_1.bin", false);
     ROS_INFO("Saved BIN Global Map to lidar_seq_1.bin");
 }
 
