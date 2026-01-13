@@ -96,12 +96,12 @@ void LineMapProcessor::processBatch(int batch_index) {
 
     // 2. Voxelization (using VoxelBuilder)
     std::vector<VoxelPoint> voxels = voxel_builder_->build(cloud);
+    saveVoxelToBin(output_path, voxels);
 
     // 3. (Future Step) Lane Generation
     // auto lanes = lane_generator_->generate(voxels);
 
     // 4. Save Result (현재는 Voxel만 저장)
-    saveVoxelToBin(output_path, voxels);
 
     ROS_INFO("Batch %d Processed: Raw %lu -> Voxel %lu points", 
              batch_index, cloud->size(), voxels.size());
