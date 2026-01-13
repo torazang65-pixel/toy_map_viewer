@@ -5,7 +5,7 @@
 #include <fstream>
 #include <iostream>
 
-#include "toy_map_viewer/BinSaver.h"
+#include "common/BinSaver.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;

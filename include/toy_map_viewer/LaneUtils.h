@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DataTypes.h"
+#include "common/DataTypes.h"
 
 struct LaneConfig {
     //Map Convereter Node

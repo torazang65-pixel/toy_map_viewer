@@ -3,7 +3,6 @@
 #include <iostream>
 
 FrameLoader::FrameLoader(const ros::NodeHandle& nh) : nh_(nh) {
-    // 파라미터 로드
     nh_.param<int>("start_index", sensor_id_, 20000);
     nh_.param<std::string>("converted_folder", input_folder_, "data/issue/converted_bin/"); 
 

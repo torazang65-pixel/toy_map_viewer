@@ -5,7 +5,7 @@
     <arg name="config_file" default="$(find toy_map_viewer)/config/converter_params.yaml" />
 
     <node pkg="rf_tf_broadcaster" type="sensor_tf_broadcaster_node" name="sensor_tf_broadcaster" output="screen">
-        <param name="sensor_id" value="$(arg start_idx)" />
+        <param name="file_name" value="$(arg start_idx)" />
     </node>
 
     <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen"/>

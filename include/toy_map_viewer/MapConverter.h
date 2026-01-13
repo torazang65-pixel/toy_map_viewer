@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "toy_map_viewer/DataTypes.h"
+#include "common/DataTypes.h"
 #include "toy_map_viewer/LaneUtils.h"
 
 class MapConverter {

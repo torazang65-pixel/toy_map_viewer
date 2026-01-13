@@ -18,7 +18,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "toy_map_viewer/DataTypes.h" // Lane, Point6D 정의 포함
+#include "common/DataTypes.h" // Lane, Point6D 정의 포함
 
 class CoordinateConverter {
 public:

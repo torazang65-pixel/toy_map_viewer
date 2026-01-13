@@ -29,7 +29,10 @@ include_directories(
 add_definitions(${PCL_DEFINITIONS})
 
 # 실행 파일 생성
-add_executable(bin_map_viewer src/bin_map_viewer.cpp)
+add_executable(bin_map_viewer
+  src/bin_map_viewer.cpp
+  src/viewer/PointCloudLayer.cpp
+)
 
 add_executable(unified_converter_node
   src/unified_converter_node.cpp
@@ -38,8 +41,10 @@ add_executable(unified_converter_node
   src/map_generator/LaneCleaner.cpp
   src/map_generator/LaneMerger.cpp
   src/map_generator/CoordinateConverter.cpp
-  src/FrameLoader.cpp
-  src/BatchSaver.cpp
+  src/real_time_map/LineMapProcessor.cpp
+  src/real_time_map/FrameLoader.cpp
+  src/real_time_map/BatchSaver.cpp
+  src/real_time_map/VoxelBuilder.cpp
 )
 
 # 라이브러리 링크

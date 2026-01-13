@@ -46,7 +46,7 @@ inline void saveToBin(const std::string& filename, const std::map<int, Lane>& ma
     std::cout << ">>> 저장 완료: " << filename << std::endl;
 }
 
-// [수정됨] Lidar 데이터 저장: x, y, z만 깔끔하게 저장
+// Lidar 데이터 저장: x, y, z만 깔끔하게 저장
 inline void saveLidarToBin(const std::string& filename, const pcl::PointCloud<pcl::PointXYZI>::Ptr& cloud) {
     std::ofstream out(filename, std::ios::binary);
     if (!out.is_open()) {
@@ -85,4 +85,36 @@ inline void saveLidarToBin(const std::string& filename, const pcl::PointCloud<pc
 
     out.close();
     // std::cout << ">>> Global Map 저장 완료(Merged): " << filename << " (Points: " << p_num << ")" << std::endl;
+}
+
+// voxel 데이터 저장
+inline void saveVoxelToBin(const std::string& filename, const std::vector<VoxelPoint>& voxels) {
+    std::ofstream out(filename, std::ios::binary);
+    if (!out.is_open()) {
+        std::cerr << "파일 생성 실패: " << filename << std::endl;
+        return;
+    }
+
+    // Global Map처럼 Cluster Num은 1로 고정
+    uint32_t cluster_num = 1; 
+    out.write(reinterpret_cast<const char*>(&cluster_num), sizeof(uint32_t));
+
+    // Frame Header (ID는 0, 포인트 개수만 저장)
+    int32_t id = 0; 
+    uint32_t p_num = static_cast<uint32_t>(voxels.size());
+
+    out.write(reinterpret_cast<const char*>(&id), sizeof(int32_t));
+    out.write(reinterpret_cast<const char*>(&p_num), sizeof(uint32_t));
+
+    // Points 저장 (x, y, z, yaw, density 순서) -> 총 20바이트/점
+    for (const auto& v : voxels) {
+        out.write(reinterpret_cast<const char*>(&v.x), sizeof(float));
+        out.write(reinterpret_cast<const char*>(&v.y), sizeof(float));
+        out.write(reinterpret_cast<const char*>(&v.z), sizeof(float));
+        out.write(reinterpret_cast<const char*>(&v.yaw), sizeof(float));
+        out.write(reinterpret_cast<const char*>(&v.density), sizeof(uint32_t));
+    }
+
+    out.close();
+    // std::cout << ">>> Voxel 저장 완료: " << filename << std::endl;
 }
