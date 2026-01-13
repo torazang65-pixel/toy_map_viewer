@@ -126,7 +126,7 @@ public:
 
         ROS_INFO(">>> Loading Animation Frames...");
         while (true) {
-            std::string filename = "pred_frames/frame_" + std::to_string(frame_idx) + ".bin";
+            std::string filename = "batch/batch_" + std::to_string(frame_idx) + ".bin";
             std::string full_path = base_dir_ + filename;
 
             if (!fileExists(full_path)) {
@@ -178,22 +178,16 @@ public:
     void playCallback(const ros::TimerEvent&) {
         if (animation_frames_.empty()) return;
 
-        pcl::PointCloud<pcl::PointXYZI> merged_cloud;
-
-        int batch_size = 5;
-        for (int i = 0; i < batch_size; ++i){
-            int idx = (current_frame_idx_ + i) % animation_frames_.size();
-            merged_cloud += *animation_frames_[idx];
-        }
+        pcl::PointCloud<pcl::PointXYZI>::Ptr current_batch = animation_frames_[current_frame_idx_];
 
         sensor_msgs::PointCloud2 output_msg;
-        pcl::toROSMsg(merged_cloud, output_msg);
+        pcl::toROSMsg(*current_batch, output_msg);
         output_msg.header.frame_id = "map";
         output_msg.header.stamp = ros::Time::now();
 
         anim_pub_.publish(output_msg);
 
-        current_frame_idx_ = (current_frame_idx_ + batch_size) % animation_frames_.size();
+        current_frame_idx_ = (current_frame_idx_ + 1) % animation_frames_.size();
     }
 
     bool fileExists(const std::string& name) {

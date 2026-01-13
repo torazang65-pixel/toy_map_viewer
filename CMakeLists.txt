@@ -33,16 +33,13 @@ add_executable(bin_map_viewer src/bin_map_viewer.cpp)
 
 add_executable(unified_converter_node
   src/unified_converter_node.cpp
-  src/MapConverter.cpp
-  src/LaneUtils.cpp
-  src/LaneCleaner.cpp
-  src/LaneMerger.cpp
-  src/CoordinateConverter.cpp
-
-  # polyline 
-  src/voxel_builder.cpp      
-  src/polyline_generator.cpp 
-  src/polyline_simplifier.cpp
+  src/map_generator/MapConverter.cpp
+  src/map_generator/LaneUtils.cpp
+  src/map_generator/LaneCleaner.cpp
+  src/map_generator/LaneMerger.cpp
+  src/map_generator/CoordinateConverter.cpp
+  src/FrameLoader.cpp
+  src/BatchSaver.cpp
 )
 
 # 라이브러리 링크

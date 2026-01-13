@@ -47,7 +47,7 @@ private:
     pcl::PointCloud<pcl::PointXYZI>::Ptr global_bin_map_;
 
     // 저장 로직을 공용으로 쓰기 위한 헬퍼 함수
-    void saveMapToFile(const typename pcl::PointCloud<pcl::PointXYZI>::Ptr& map, const std::string& filename);
+    void saveMapToFile(const typename pcl::PointCloud<pcl::PointXYZI>::Ptr& map, const std::string& filename, bool filter_mode);
     
     std::string sensor_frame_id_; // 예: "pandar"
     std::string vehicle_frame_id_; // 예: "pcra"
@@ -58,6 +58,7 @@ private:
     std::string sensor_dir_;
     std::string output_dir_;
     std::string pred_frames_dir_;
+    std::string pred_folder_;
     int sensor_id_;
     bool is_first_frame_;
 };
