@@ -38,6 +38,11 @@ add_executable(unified_converter_node
   src/LaneCleaner.cpp
   src/LaneMerger.cpp
   src/CoordinateConverter.cpp
+
+  # polyline 
+  src/voxel_builder.cpp      
+  src/polyline_generator.cpp 
+  src/polyline_simplifier.cpp
 )
 
 # 라이브러리 링크
