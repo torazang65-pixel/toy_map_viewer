@@ -36,7 +36,7 @@ CoordinateConverter::CoordinateConverter()
     // 경로 설정
     std::string pkg_path = ros::package::getPath("toy_map_viewer");
     base_dir_ = pkg_path + "/data/";
-    sensor_dir_ = base_dir_ + "sensor/" + std::to_string(sensor_id_) + "/";
+    sensor_dir_ = base_dir_ + "sensor/" + std::to_string(sensor_id_) + "/pandar64_0/";
     output_dir_ = pkg_path + "/data/issue/converted_bin/" + std::to_string(sensor_id_) + "/"; // 저장 경로 변경
     pred_frames_dir_ = output_dir_ + "pred_frames/";
 

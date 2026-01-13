@@ -1,7 +1,7 @@
 # 입출력 경로
 input_folder: "data/issue/global_maps/"
 output_folder: "data/issue/converted_bin/"
-pred_folder: "issue_laneline_pred_nms/"
+pred_folder: "issue_laneline_pred/"
 
 # 맵 처리 관련 (Crop & Cleaning)
 crop_mode: false

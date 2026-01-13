@@ -38,22 +38,19 @@ struct ArrayHasher {
   }
 };
 
-bool build(const PathManager::PathContext &ctx) {
+bool build(const std::string &file_path) {
   ros::NodeHandle nh("~");
 
-  // 1. 기존 PathManager 대신 toy_map_viewer 패키지의 경로를 직접 참조
-  std::string pkg_path = ros::package::getPath("toy_map_viewer");
-  
-  // 2. CoordinateConverter가 저장하는 경로와 파일명(lidar_seq_1.bin)으로 변경
-  // ctx.data_idx가 CoordinateConverter의 sensor_id_와 대응된다고 가정합니다.
-  std::string line_pc_filename = pkg_path + "/data/issue/converted_bin/21079/lidar_seq_1.bin";
-
-  // 3. 파일 존재 여부 확인 및 로드
+  // 데이터 로드
   std::vector<data_types::Point> points;
-  if (!io::load_points(line_pc_filename, points)) {
-      ROS_ERROR("Failed to load points from %s", line_pc_filename.c_str());
-      return false;
+  for (const auto& path : input_paths) {
+      std::vector<data_types::Point> frame_points;
+      if (linemapdraft_builder::io::load_points(path, frame_points)) {
+          points.insert(points.end(), frame_points.begin(), frame_points.end());
+      }
   }
+
+  if (points.empty()) return false;
 
 
   // Get parameters from ROS parameter server
@@ -93,7 +90,7 @@ bool build(const PathManager::PathContext &ctx) {
   ROS_INFO("voxel build start.");
   ROS_INFO("voxel_size: %f, yaw_voxel_size:%f", voxel_size, yaw_voxel_size);
 
-  //const std::string line_pc_filename = PathManager::getStageBinaryPath(ctx, PathManager::Stage::LinePC, PathManager::BinaryKind::Points);
+  const std::string line_pc_filename = PathManager::getStageBinaryPath(ctx, PathManager::Stage::LinePC, PathManager::BinaryKind::Points);
   const std::string line_voxel_filename = PathManager::getStageBinaryPath(ctx, PathManager::Stage::LineVoxel, PathManager::BinaryKind::Points);
 
   uint32_t in_point_num;
