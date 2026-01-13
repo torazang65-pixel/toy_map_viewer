@@ -180,7 +180,7 @@ public:
 
         pcl::PointCloud<pcl::PointXYZI> merged_cloud;
 
-        int batch_size = 5;
+        int batch_size = 20;
         for (int i = 0; i < batch_size; ++i){
             int idx = (current_frame_idx_ + i) % animation_frames_.size();
             merged_cloud += *animation_frames_[idx];
