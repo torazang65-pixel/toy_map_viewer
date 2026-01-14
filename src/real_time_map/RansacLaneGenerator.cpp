@@ -39,22 +39,28 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
     auto expand_lane = [&](int start_node_idx, bool is_forward) -> std::vector<Point6D> {
         std::vector<Point6D> final_projected_points;
         
-        std::vector<int> current_inliers;
-        current_inliers.push_back(start_node_idx);
+        // 1. 상태 변수 초기화
+        std::vector<int> current_inliers; 
+        current_inliers.push_back(start_node_idx); // 초기 시드 포함
         
         VoxelNode* search_center_node = &nodes[start_node_idx];
         
-        // [변경] 초기 모델을 2D 평면(z=0)으로 설정
+        // 초기 직선 모델 (2D 평면 z=0 가정)
+        // 시드점의 Yaw를 이용해 초기 방향 벡터 설정
         Eigen::Vector3f curr_p0(search_center_node->point.x, search_center_node->point.y, 0.0f);
         float yaw = search_center_node->point.yaw;
-        if (!is_forward) yaw += M_PI;
-        Eigen::Vector3f curr_dir(std::cos(yaw), std::sin(yaw), 0.0f); // z성분 0
+        if (!is_forward) yaw += M_PI; 
+        Eigen::Vector3f curr_dir(std::cos(yaw), std::sin(yaw), 0.0f);
 
         bool model_initialized = false;
 
         while (true) {
+            // ---------------------------------------------------------
+            // 2. 주변 점 탐색 (Radius Search - 3D 거리 기준)
+            // ---------------------------------------------------------
             std::vector<int> neighbor_indices;
             std::vector<float> neighbor_dists;
+            // 검색은 3D 좌표로 수행 (도로의 높낮이 반영)
             pcl::PointXYZ search_pt(search_center_node->point.x, search_center_node->point.y, search_center_node->point.z);
             
             if (kdtree.radiusSearch(search_pt, config_.search_radius, neighbor_indices, neighbor_dists) <= 0) break;
@@ -63,31 +69,29 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
             
             for (int ni : neighbor_indices) {
                 if (nodes[ni].visited) continue;
+                // 중복 방지
                 if (std::find(current_inliers.begin(), current_inliers.end(), ni) != current_inliers.end()) continue;
 
-                // [추가] Z축 범위 필터링: 검색 중심점과 높이 차이가 허용 범위 이내인지 확인
-                if (std::abs(nodes[ni].point.z - search_center_node->point.z) > config_.z_tolerance) {
-                    continue;
-                }
+                // [추가] Z축 허용 범위 필터링 (검색 중심점 기준)
+                if (std::abs(nodes[ni].point.z - search_center_node->point.z) > config_.z_tolerance) continue;
 
-                // [변경] 거리 계산을 위한 점을 2D로 투영 (z=0)
+                // 거리/방향 계산을 위해 2D 투영 (z=0)
                 Eigen::Vector3f pt_2d(nodes[ni].point.x, nodes[ni].point.y, 0.0f);
 
-                // 1) 방향 체크 (기존 유지 - 3D yaw 사용해도 무방하나 xy평면상 yaw가 중요함)
+                // 1) 방향 체크 (3D Yaw 사용)
                 float pt_yaw = nodes[ni].point.yaw;
                 float model_yaw = std::atan2(curr_dir.y(), curr_dir.x());
                 float yaw_diff = std::abs(pt_yaw - model_yaw);
                 while(yaw_diff > M_PI) yaw_diff -= 2 * M_PI;
                 if (std::abs(yaw_diff) > rad_threshold) continue;
 
-                // 2) 거리 체크 (2D 평면 상에서의 거리)
+                // 2) 거리 체크 (2D 평면상 직선과의 거리)
                 if (model_initialized) {
-                    // curr_p0, curr_dir 모두 z=0이므로 XY 평면 거리만 계산됨
                     float dist_to_line = (pt_2d - curr_p0).cross(curr_dir).norm();
-                    if (dist_to_line > 0.5f) continue;
+                    if (dist_to_line > 0.5f) continue; // 50cm 이내
                     
-                    // 진행 방향 체크
-                    if ((pt_2d - curr_p0).dot(curr_dir) < 0) continue;
+                    // 진행 방향(앞쪽)에 있는 점인지 체크
+                    if ((pt_2d - curr_p0).dot(curr_dir) < -0.5f) continue; // 약간의 후방은 허용(-0.5)
                 }
 
                 new_candidates.push_back(ni);
@@ -95,15 +99,19 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
 
             if (new_candidates.empty()) break;
 
+            // ---------------------------------------------------------
+            // 3. 모델 재피팅 (Global Line Refinement)
+            // ---------------------------------------------------------
+            // 현재까지의 모든 점(기존 inliers + 새 후보)을 합쳐서 RANSAC을 다시 돌림
             std::vector<int> temp_inliers = current_inliers;
             temp_inliers.insert(temp_inliers.end(), new_candidates.begin(), new_candidates.end());
 
             if (temp_inliers.size() < config_.min_inliers) break;
 
-            // [변경] RANSAC 수행 시 Z값을 0으로 강제하여 2D Line Fitting 유도
-            pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+            // [핵심] RANSAC용 클라우드 생성 시 Z=0으로 강제 투영 (2D Line Fitting 유도)
+            pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud_2d(new pcl::PointCloud<pcl::PointXYZ>);
             for (int idx : temp_inliers) {
-                temp_cloud->push_back(pcl::PointXYZ(nodes[idx].point.x, nodes[idx].point.y, 0.0f));
+                temp_cloud_2d->push_back(pcl::PointXYZ(nodes[idx].point.x, nodes[idx].point.y, 0.0f));
             }
 
             pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
@@ -112,42 +120,53 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
             seg.setOptimizeCoefficients(true);
             seg.setModelType(pcl::SACMODEL_LINE);
             seg.setMethodType(pcl::SAC_RANSAC);
-            seg.setDistanceThreshold(config_.distance_threshold);
-            seg.setInputCloud(temp_cloud);
+            seg.setDistanceThreshold(config_.distance_threshold); // 2D 거리 허용 오차
+            seg.setInputCloud(temp_cloud_2d);
             seg.segment(*sac_inliers, *coefficients);
 
             if (sac_inliers->indices.empty()) break;
 
+            // ---------------------------------------------------------
+            // 4. 모델 업데이트
+            // ---------------------------------------------------------
             model_initialized = true;
             
-            // 모델 업데이트 (결과는 z=0인 직선)
-            curr_p0 = Eigen::Vector3f(coefficients->values[0], coefficients->values[1], 0.0f);
-            curr_dir = Eigen::Vector3f(coefficients->values[3], coefficients->values[4], 0.0f);
-            curr_dir.normalize();
+            // 새 모델 파라미터 (Z=0인 직선)
+            Eigen::Vector3f new_p0(coefficients->values[0], coefficients->values[1], 0.0f);
+            Eigen::Vector3f new_dir(coefficients->values[3], coefficients->values[4], 0.0f);
+            new_dir.normalize();
 
-            // 방향 정렬
-            float check_yaw = (current_inliers.size() == 1) ? 
-                              (is_forward ? nodes[start_node_idx].point.yaw : nodes[start_node_idx].point.yaw + M_PI) :
-                              std::atan2(curr_dir.y(), curr_dir.x());
+            // 방향 정렬 (이전 진행 방향과 반대면 뒤집기)
+            if (curr_dir.dot(new_dir) < 0) {
+                new_dir = -new_dir;
+            }
             
-            // ... (방향 뒤집기 로직 동일) ...
+            // 모델 갱신
+            curr_p0 = new_p0;
+            curr_dir = new_dir;
 
-            // Inlier 업데이트
+            // ---------------------------------------------------------
+            // 5. Inlier 리스트 업데이트
+            // ---------------------------------------------------------
+            // RANSAC 결과로 선택된 인덱스들만 실제 Inlier로 확정
             std::vector<int> refined_inliers;
             for (int idx : sac_inliers->indices) {
                 refined_inliers.push_back(temp_inliers[idx]);
             }
             
+            // 더 이상 확장이 안 되면(새로운 점이 추가되지 않았거나 줄어들면) 종료
             if (refined_inliers.size() <= current_inliers.size()) break;
 
             current_inliers = refined_inliers;
 
-            // [변경] 다음 탐색 중심 찾기 (2D 상에서 가장 먼 점을 찾되, 실제 3D 좌표로 갱신)
+            // ---------------------------------------------------------
+            // 6. 다음 탐색 중심 설정 (가장 끝 점 찾기)
+            // ---------------------------------------------------------
             float max_t = -std::numeric_limits<float>::max();
             int best_end_idx = -1;
 
             for (int idx : current_inliers) {
-                // 투영 거리 t 계산은 2D로
+                // 투영 거리 t 계산 (2D 상에서 수행)
                 Eigen::Vector3f pt_2d(nodes[idx].point.x, nodes[idx].point.y, 0.0f);
                 float t = (pt_2d - curr_p0).dot(curr_dir);
                 if (t > max_t) {
@@ -157,35 +176,34 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
             }
             
             if (best_end_idx != -1) {
-                // *중요* 검색 중심은 실제 3D 점으로 업데이트하여 다음 검색 시 로컬 높이를 반영
+                // 다음 검색은 해당 점의 *실제 3D 좌표*를 중심으로 수행
                 search_center_node = &nodes[best_end_idx];
             } else {
                 break;
             }
         }
 
-        // 7. 최종 저장: Inlier들의 '실제 3D 좌표'를 저장해야 함
+        // ---------------------------------------------------------
+        // 7. 최종 투영 및 결과 반환
+        // ---------------------------------------------------------
         if (current_inliers.size() < 2) return {};
 
         for(int idx : current_inliers) nodes[idx].visited = true;
 
         std::vector<std::pair<float, Point6D>> sorted_pts;
         for (int idx : current_inliers) {
-            // 정렬을 위한 t는 2D 직선 기준
+            // 정렬 기준 t는 2D 직선 상의 투영 거리
             Eigen::Vector3f pt_2d(nodes[idx].point.x, nodes[idx].point.y, 0.0f);
             float t = (pt_2d - curr_p0).dot(curr_dir);
             
-            // *중요* 저장은 원본 3D 좌표를 사용
+            // 저장은 *원본 3D 좌표*를 사용
             Point6D p;
             p.x = nodes[idx].point.x;
             p.y = nodes[idx].point.y;
-            p.z = nodes[idx].point.z; // 원본 높이 유지
+            p.z = nodes[idx].point.z; 
             
-            // 방향 벡터는 2D로 구한 것을 사용 (z성분 0)하거나, 3D PCA로 다시 구할 수도 있음
-            // 여기서는 2D 방향을 유지
-            p.dx = curr_dir.x(); 
-            p.dy = curr_dir.y(); 
-            p.dz = 0.0; // or curr_dir.z() which is 0
+            // 방향 벡터는 2D로 구한 것 (z=0)
+            p.dx = curr_dir.x(); p.dy = curr_dir.y(); p.dz = 0.0;
             
             sorted_pts.push_back({t, p});
         }
@@ -197,7 +215,7 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
 
         return final_projected_points;
     };
-
+    
     // 3. 메인 루프 (Seed 순회)
     for (int idx : sorted_indices) {
         if (nodes[idx].visited) continue;
