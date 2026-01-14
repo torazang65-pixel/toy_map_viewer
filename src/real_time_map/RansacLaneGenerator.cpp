@@ -125,51 +125,25 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
 
             if (sac_inliers->indices.empty()) break;
 
+            // 2.3 모델 업데이트
             model_initialized = true;
             
-            // 1) RANSAC으로 구한 순수 직선 방향
-            Eigen::Vector3f ransac_dir(coefficients->values[3], coefficients->values[4], 0.0f);
-            ransac_dir.normalize();
+            // 새 모델 파라미터 (Z=0인 직선)
+            Eigen::Vector3f new_p0(coefficients->values[0], coefficients->values[1], 0.0f);
+            Eigen::Vector3f new_dir(coefficients->values[3], coefficients->values[4], 0.0f);
+            new_dir.normalize();
 
-            // 이전 진행 방향(curr_dir)과 비교하여 뒤집힘 방지 (관성 유지)
-            // (첫 루프에서는 시드 방향이 curr_dir임)
-            if (curr_dir.dot(ransac_dir) < 0) {
-                ransac_dir = -ransac_dir;
+            // 초기 시드 방향과 반대라면 뒤집기 (일관성 유지)
+            float seed_yaw = nodes[start_node_idx].point.yaw;
+            if(!is_forward) seed_yaw += M_PI;
+            Eigen::Vector3f seed_dir(std::cos(seed_yaw), std::sin(seed_yaw), 0.0f);
+
+            if (new_dir.dot(seed_dir) < 0) {
+                new_dir = -new_dir;
             }
-
-            // 2) Inlier 점들의 평균 Yaw 방향 계산
-            Eigen::Vector3f avg_pt_dir(0.0f, 0.0f, 0.0f);
-            int valid_cnt = 0;
-
-            for (int idx : sac_inliers->indices) {
-                int global_idx = temp_inliers[idx]; // temp_cloud의 인덱스는 temp_inliers의 인덱스와 같음
-                float pt_yaw = nodes[global_idx].point.yaw;
-                
-                // 개별 점의 방향 벡터
-                Eigen::Vector3f d(std::cos(pt_yaw), std::sin(pt_yaw), 0.0f);
-                
-                // 점의 방향이 직선 방향(ransac_dir)과 반대라면 뒤집어서 합산 (일관성)
-                if (d.dot(ransac_dir) < 0) d = -d;
-                
-                avg_pt_dir += d;
-                valid_cnt++;
-            }
-
-            if (valid_cnt > 0) {
-                avg_pt_dir.normalize();
-            } else {
-                avg_pt_dir = ransac_dir; // fallback
-            }
-
-            // 3) Blending (가중치 적용)
-            float alpha = 0.3f; 
-            Eigen::Vector3f blended_dir = (1.0f - alpha) * ransac_dir + alpha * avg_pt_dir;
-            blended_dir.normalize();
             
-            // 모델 갱신
-            curr_p0 = Eigen::Vector3f(coefficients->values[0], coefficients->values[1], 0.0f);
-            curr_dir = blended_dir;
-
+            curr_p0 = new_p0;
+            curr_dir = new_dir;
 
             // 2.4 Inlier 리스트 업데이트 (RANSAC 결과만 남김)
             std::vector<int> refined_inliers;
@@ -247,6 +221,11 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
         std::vector<Point6D> forward_pts = expand_lane(idx, true);
         std::vector<Point6D> backward_pts = expand_lane(idx, false);
         
+        // 합치기 (Back 뒤집을 필요 없음, 이미 방향 고려됨) -> 아님, 뒤집어야 함?
+        // expand_lane 로직 상 backward는 역방향으로 뻗어나가므로, t값이 증가하는 순서로 정렬되어 있음.
+        // 즉, [Seed -> ... -> End] 순서임.
+        // 전체 Lane을 만들려면 [BackEnd -> ... -> Seed -> ... -> FwdEnd] 순이어야 함.
+        // 따라서 Backward 결과는 뒤집어야 함.
         std::reverse(backward_pts.begin(), backward_pts.end());
 
         std::vector<Point6D> all_points = backward_pts;
