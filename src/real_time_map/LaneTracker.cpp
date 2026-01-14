@@ -30,6 +30,44 @@ static void initSingleKF(cv::KalmanFilter& kf, const Point6D& pt, const Point6D&
     kf.statePost.at<float>(5) = static_cast<float>(dir.dz);
 }
 
+// 방향성 기반 연결 지점 찾는 헬퍼 함수
+static int findConnectionPoint(const std::vector<Point6D>& candidates, 
+                               const Point6D& anchor_pt, 
+                               const Point6D& track_dir, 
+                               double angle_threshold) 
+{
+    
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        const auto& pt = candidates[i];
+        
+        // 기준점 -> 후보점 벡터 계산
+        Point6D conn_vec;
+        conn_vec.dx = pt.x - anchor_pt.x;
+        conn_vec.dy = pt.y - anchor_pt.y;
+        conn_vec.dz = pt.z - anchor_pt.z;
+        
+        // 거리가 너무 가까우면(0에 가까우면) 각도 계산이 불안정하므로 패스 (겹친 점으로 간주)
+        double dist = std::sqrt(conn_vec.dx*conn_vec.dx + conn_vec.dy*conn_vec.dy + conn_vec.dz*conn_vec.dz);
+        if (dist < 0.1) continue; 
+
+        // 방향 정규화
+        conn_vec.dx /= dist; conn_vec.dy /= dist; conn_vec.dz /= dist;
+
+        // 각도 차이 계산 (내적)
+        double dot = track_dir.dx * conn_vec.dx + track_dir.dy * conn_vec.dy + track_dir.dz * conn_vec.dz;
+        // dot 값 클램핑 (-1.0 ~ 1.0)
+        dot = std::max(-1.0, std::min(1.0, dot));
+        double angle_deg = std::acos(dot) * 180.0 / M_PI;
+
+        // 각도 차이가 임계값 이내이면, 이 점이 "자연스럽게 이어지는 시작점"임
+        if (angle_deg < angle_threshold) {
+            return static_cast<int>(i);
+        }
+    }
+    
+    return -1; // 연결 가능한 점을 찾지 못함 (완전 중복이거나 방향이 엉망)
+}
+
 void LaneTracker::initializeTrack(Track& track, const Lane& segment) {
     const Point6D& start = segment.points.front();
     const Point6D& end = segment.points.back();
@@ -221,34 +259,88 @@ std::map<int, Lane> LaneTracker::process(const std::map<int, Lane>& detected_lan
             auto& track = active_tracks[best_track_idx];
             Lane to_merge = segment;
             
-            // 세그먼트 뒤집기 적용 (점 순서만 뒤집음)
+            // 세그먼트 뒤집기 적용
             if (should_reverse_segment) {
                 std::reverse(to_merge.points.begin(), to_merge.points.end());
             }
 
-            if (match_type == 1) { // [Front Merge]: Track ... -> New Seg
-                // 측정치: 세그먼트의 '끝점'과 '방향'으로 Front KF 업데이트
-                // (세그먼트가 뒤집혔으면, 끝점이 곧 원래의 start였을 것임. 위에서 뒤집었으니 back()이 맞음)
+            // [사용자 요청 로직 적용] 
+            // "이어지는 각도가 threshold 안에 들어올 때까지 찾고, 그 이전은 삭제"
+            const double SMOOTH_CONNECTION_ANGLE = 30.0; // 연결 허용 각도 (약간 여유 있게)
+
+            if (match_type == 1) { // [Front Merge]: Track(End) -> New Seg
                 Point6D meas_dir = should_reverse_segment ? seg_dir_inv : seg_dir;
-                
                 updateKF(track->kf_front, to_merge.points.back(), meas_dir);
                 track->predicted_front = predictKF(track->kf_front);
                 
-                // 점 추가 (뒤에 붙임)
-                track->lane.points.insert(track->lane.points.end(), 
-                                          to_merge.points.begin(), to_merge.points.end());
-            } 
-            else if (match_type == 2) { // [Back Merge]: New Seg -> ... Track
-                // 측정치: 세그먼트의 '시작점'과 '역방향'으로 Back KF 업데이트
-                // (세그먼트를 앞에 붙일 것이므로, 더 먼 쪽(Start)으로 상태 갱신)
+                if (!track->lane.points.empty()) {
+                    Point6D last_pt = track->lane.points.back();
+                    
+                    // Track의 진행 방향 (Front KF 상태)
+                    Point6D trk_dir;
+                    trk_dir.dx = track->state_front.at<float>(3);
+                    trk_dir.dy = track->state_front.at<float>(4);
+                    trk_dir.dz = track->state_front.at<float>(5);
+
+                    // 유효한 연결 점 찾기
+                    int valid_idx = findConnectionPoint(to_merge.points, last_pt, trk_dir, SMOOTH_CONNECTION_ANGLE);
+
+                    if (valid_idx != -1) {
+                        // 찾았으면 그 점부터 끝까지 병합 (이전 점들은 중복/노이즈로 간주하여 삭제됨)
+                        track->lane.points.insert(track->lane.points.end(), 
+                                                  to_merge.points.begin() + valid_idx, 
+                                                  to_merge.points.end());
+                    } else {
+                        // 못 찾았으면? -> "해당 segment는 전부 중복된거라고 판단하고 없애버림"
+                        // (아무것도 하지 않음)
+                    }
+                } else {
+                    // 트랙이 비어있었다면 그냥 추가 (예외 처리)
+                    track->lane.points = to_merge.points;
+                }
+
+            } else if (match_type == 2) { // [Back Merge]: New Seg -> Track(Start)
                 Point6D meas_dir = should_reverse_segment ? seg_dir : seg_dir_inv;
-                
                 updateKF(track->kf_back, to_merge.points.front(), meas_dir);
                 track->predicted_back = predictKF(track->kf_back);
 
-                // 점 추가 (앞에 붙임)
-                track->lane.points.insert(track->lane.points.begin(), 
-                                          to_merge.points.begin(), to_merge.points.end());
+                if (!track->lane.points.empty()) {
+                    Point6D first_pt = track->lane.points.front();
+
+                    // Track의 역방향 진행 방향 (Back KF 상태)
+                    Point6D trk_back_dir;
+                    trk_back_dir.dx = track->state_back.at<float>(3);
+                    trk_back_dir.dy = track->state_back.at<float>(4);
+                    trk_back_dir.dz = track->state_back.at<float>(5);
+
+                    // Back Merge는 세그먼트의 '뒤'에서부터 '앞'으로 탐색해야 함
+                    // (세그먼트의 끝점이 트랙의 시작점과 가까우므로, 끝점부터 역순으로 검사)
+                    std::vector<Point6D> reversed_points = to_merge.points;
+                    std::reverse(reversed_points.begin(), reversed_points.end());
+
+                    int valid_idx = findConnectionPoint(reversed_points, first_pt, trk_back_dir, SMOOTH_CONNECTION_ANGLE);
+
+                    if (valid_idx != -1) {
+                        // 찾았으면 유효한 점들을 추출
+                        // reversed_points[valid_idx]가 유효한 점이므로, 
+                        // 원래 순서에서는 (size - 1 - valid_idx) 인덱스가 됨.
+                        // 이 점을 포함하여 그 '앞쪽' 점들을 가져와야 함.
+                        
+                        // 예: Orig [A, B, C, D], valid_idx(from D) = 1 (C가 유효)
+                        // -> [A, B, C]를 가져와야 함.
+                        
+                        auto start_iter = to_merge.points.begin();
+                        auto end_iter = to_merge.points.end() - valid_idx; 
+                        
+                        // 트랙의 앞에 삽입
+                        track->lane.points.insert(track->lane.points.begin(), 
+                                                  start_iter, end_iter);
+                    } else {
+                        // 전부 중복 -> 삭제 (스킵)
+                    }
+                } else {
+                    track->lane.points = to_merge.points;
+                }
             }
 
         } else {
