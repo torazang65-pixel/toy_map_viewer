@@ -173,10 +173,22 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
         }
 
         // 7. 최종 투영 및 저장 (Loop 종료 후 한 번만 수행)
+        float sweep_r = config_.sweep_radius;
+        std::vector<int> sweep_indices;
+        std::vector<float> sweep_dists;
         if (current_inliers.size() < 2) return {};
 
         // Inlier 점들을 방문 처리
-        for(int idx : current_inliers) nodes[idx].visited = true;
+        for(int idx : current_inliers) {
+            pcl::PointXYZ center_pt(nodes[idx].point.x, nodes[idx].point.y, nodes[idx].point.z);
+
+            if (kdtree.radiusSearch(center_pt, sweep_r, sweep_indices, sweep_dists) > 0) {
+                for (int neighbor_idx : sweep_indices) {
+                    if (nodes[neighbor_idx].visited) continue;
+                    nodes[neighbor_idx].visited = true;
+                }
+            }
+        }
 
         // 투영 및 정렬
         std::vector<std::pair<float, Point6D>> sorted_pts;
