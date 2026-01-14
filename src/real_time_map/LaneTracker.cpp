@@ -103,14 +103,16 @@ std::map<int, Lane> LaneTracker::process(const std::map<int, Lane>& detected_lan
     std::map<int, Lane> merged_lanes_map;
     if (detected_lanes.empty()) return merged_lanes_map;
 
+    // 1. Map -> Vector 변환
     std::vector<Lane> segments;
     for (const auto& pair : detected_lanes) {
         if (pair.second.points.size() < 2) continue;
         segments.push_back(pair.second);
     }
+
     if (segments.empty()) return merged_lanes_map;
 
-    // Center-Out 정렬
+    // 2. Center-Out Strategy: 배치의 중심에서 가까운 순서대로 정렬
     Point6D center = calculateBatchCenter(segments);
     std::sort(segments.begin(), segments.end(), [&](const Lane& a, const Lane& b) {
         double dist_a = LaneUtils::GetDistance(a.points[a.points.size()/2], center);
@@ -118,6 +120,7 @@ std::map<int, Lane> LaneTracker::process(const std::map<int, Lane>& detected_lan
         return dist_a < dist_b;
     });
 
+    // 3. Tracking Loop
     std::vector<std::shared_ptr<Track>> active_tracks;
 
     for (const auto& segment : segments) {
@@ -125,115 +128,122 @@ std::map<int, Lane> LaneTracker::process(const std::map<int, Lane>& detected_lan
         int best_track_idx = -1;
         double min_dist = std::numeric_limits<double>::max();
         
-        // 매칭 정보: [0]: Front에 붙음, [1]: Back에 붙음
-        int match_type = 0; 
+        int match_type = 0; // 0: None, 1: Front, 2: Back
         bool should_reverse_segment = false; 
 
         const Point6D& seg_start = segment.points.front();
         const Point6D& seg_end = segment.points.back();
         
-        // 세그먼트 방향 벡터
+        // 세그먼트 방향 벡터 (Start -> End)
         Point6D seg_dir; 
         double len = LaneUtils::GetDistance(seg_start, seg_end);
         if(len < 1e-6) len = 1.0;
         seg_dir.dx = (seg_end.x - seg_start.x) / len;
         seg_dir.dy = (seg_end.y - seg_start.y) / len;
         seg_dir.dz = (seg_end.z - seg_start.z) / len;
+        
+        // 세그먼트 역방향 벡터
+        Point6D seg_dir_inv = {-seg_dir.dx, -seg_dir.dy, -seg_dir.dz, 0,0,0};
 
-        // 기존 트랙들과 매칭 시도
         for (int i = 0; i < active_tracks.size(); ++i) {
             auto& track = active_tracks[i];
 
-            // ---------------------------------------------------
-            // Case A: Front Extension (기존 트랙의 머리 + 새 세그먼트)
-            // ---------------------------------------------------
-            Point6D seg_dir; 
-            double len = LaneUtils::GetDistance(seg_start, seg_end);
-            if(len < 1e-6) len = 1.0;
-            seg_dir.dx = (seg_end.x - seg_start.x) / len;
-            seg_dir.dy = (seg_end.y - seg_start.y) / len;
-            seg_dir.dz = (seg_end.z - seg_start.z) / len;
-            // 세그먼트의 역방향
-            Point6D seg_dir_inv = {-seg_dir.dx, -seg_dir.dy, -seg_dir.dz, 0,0,0};
+            // ===================================================
+            // Case A: Front Extension (기존 트랙 머리 + 새 세그먼트)
+            // ===================================================
+            Point6D pred_f = track->predicted_front;
+            Point6D trk_dir_f; 
+            trk_dir_f.dx = track->state_front.at<float>(3);
+            trk_dir_f.dy = track->state_front.at<float>(4);
+            trk_dir_f.dz = track->state_front.at<float>(5);
 
-            for (int i = 0; i < active_tracks.size(); ++i) {
-                auto& track = active_tracks[i];
+            double d_f_normal = LaneUtils::GetDistance(pred_f, seg_start);
+            double d_f_reverse = LaneUtils::GetDistance(pred_f, seg_end);
 
-                // --- Front Check ---
-                // Track: Head에서 나가는 방향 (Forward)
-                // Seg: Start가 붙으면 Forward(seg_dir), End가 붙으면 Backward(seg_dir_inv)
-                Point6D trk_dir_f; 
-                trk_dir_f.dx = track->state_front.at<float>(3);
-                trk_dir_f.dy = track->state_front.at<float>(4);
-                
-                double d_f_normal = LaneUtils::GetDistance(track->predicted_front, seg_start);
-                double d_f_reverse = LaneUtils::GetDistance(track->predicted_front, seg_end);
-                
-                bool is_front_reverse = (d_f_reverse < d_f_normal);
-                double d_front = is_front_reverse ? d_f_reverse : d_f_normal;
-                
+            bool is_front_reverse = (d_f_reverse < d_f_normal);
+            double d_front = is_front_reverse ? d_f_reverse : d_f_normal;
+            Point6D target_pt_f = is_front_reverse ? seg_end : seg_start;
+
+            double conn_dx_f = target_pt_f.x - pred_f.x;
+            double conn_dy_f = target_pt_f.y - pred_f.y;
+            double dot_f = conn_dx_f * trk_dir_f.dx + conn_dy_f * trk_dir_f.dy;
+
+            // -0.5m 정도의 약간의 겹침은 허용하지만, 너무 뒤쪽이면 스킵
+            if (dot_f > -0.5) {
                 // 비교: 트랙 방향 vs (세그먼트가 연결되면 뻗어나갈 방향)
-                Point6D check_f = is_front_reverse ? seg_dir_inv : seg_dir;
+                Point6D check_dir_f = is_front_reverse ? seg_dir_inv : seg_dir;
                 
-                if (getAngleDiff(trk_dir_f, check_f) <= config_.match_angle_threshold) {
+                if (getAngleDiff(trk_dir_f, check_dir_f) <= config_.match_angle_threshold) {
                     if (d_front < config_.match_distance_threshold && d_front < min_dist) {
                         min_dist = d_front;
                         best_track_idx = i;
-                        match_type = 1;
+                        match_type = 1; // Front Match
                         should_reverse_segment = is_front_reverse;
                     }
                 }
+            }
 
-                // --- Back Check ---
-                Point6D trk_dir_b;
-                trk_dir_b.dx = track->state_back.at<float>(3);
-                trk_dir_b.dy = track->state_back.at<float>(4);
+            // ===================================================
+            // Case B: Back Extension (새 세그먼트 + 기존 트랙 꼬리)
+            // ===================================================
+            Point6D pred_b = track->predicted_back;
+            Point6D trk_dir_b; // 트랙 꼬리에서 '뒤로' 나가는 방향
+            trk_dir_b.dx = track->state_back.at<float>(3);
+            trk_dir_b.dy = track->state_back.at<float>(4);
+            trk_dir_b.dz = track->state_back.at<float>(5);
 
-                double d_b_normal = LaneUtils::GetDistance(track->predicted_back, seg_end);
-                double d_b_reverse = LaneUtils::GetDistance(track->predicted_back, seg_start);
+            double d_b_normal = LaneUtils::GetDistance(pred_b, seg_end);
+            double d_b_reverse = LaneUtils::GetDistance(pred_b, seg_start);
 
-                bool is_back_reverse = (d_b_reverse < d_b_normal);
-                double d_back = is_back_reverse ? d_b_reverse : d_b_normal;
+            bool is_back_reverse = (d_b_reverse < d_b_normal);
+            double d_back = is_back_reverse ? d_b_reverse : d_b_normal;
+            Point6D target_pt_b = is_back_reverse ? seg_start : seg_end;
 
-                Point6D check_b = is_back_reverse ? seg_dir : seg_dir_inv;
+            double conn_dx_b = target_pt_b.x - pred_b.x;
+            double conn_dy_b = target_pt_b.y - pred_b.y;
+            double dot_b = conn_dx_b * trk_dir_b.dx + conn_dy_b * trk_dir_b.dy;
 
-                if (getAngleDiff(trk_dir_b, check_b) <= config_.match_angle_threshold) {
+            if (dot_b > -0.5) {
+                Point6D check_dir_b = is_back_reverse ? seg_dir : seg_dir_inv;
+
+                if (getAngleDiff(trk_dir_b, check_dir_b) <= config_.match_angle_threshold) {
                     if (d_back < config_.match_distance_threshold && d_back < min_dist) {
                         min_dist = d_back;
                         best_track_idx = i;
-                        match_type = 2;
+                        match_type = 2; // Back Match
                         should_reverse_segment = is_back_reverse;
                     }
                 }
             }
         }
 
-        // 매칭 처리
         if (best_track_idx != -1) {
             auto& track = active_tracks[best_track_idx];
             Lane to_merge = segment;
             
-            // 세그먼트 뒤집기 적용
+            // 세그먼트 뒤집기 적용 (점 순서만 뒤집음)
             if (should_reverse_segment) {
                 std::reverse(to_merge.points.begin(), to_merge.points.end());
-                seg_dir.dx = -seg_dir.dx; seg_dir.dy = -seg_dir.dy; seg_dir.dz = -seg_dir.dz;
             }
 
-            if (match_type == 1) { 
-                // [Front Merge]: Track ... -> New Segment
+            if (match_type == 1) { // [Front Merge]: Track ... -> New Seg
                 // 측정치: 세그먼트의 '끝점'과 '방향'으로 Front KF 업데이트
-                updateKF(track->kf_front, to_merge.points.back(), seg_dir);
+                // (세그먼트가 뒤집혔으면, 끝점이 곧 원래의 start였을 것임. 위에서 뒤집었으니 back()이 맞음)
+                Point6D meas_dir = should_reverse_segment ? seg_dir_inv : seg_dir;
+                
+                updateKF(track->kf_front, to_merge.points.back(), meas_dir);
                 track->predicted_front = predictKF(track->kf_front);
                 
                 // 점 추가 (뒤에 붙임)
                 track->lane.points.insert(track->lane.points.end(), 
                                           to_merge.points.begin(), to_merge.points.end());
             } 
-            else if (match_type == 2) {
-                // [Back Merge]: New Segment -> ... Track
+            else if (match_type == 2) { // [Back Merge]: New Seg -> ... Track
                 // 측정치: 세그먼트의 '시작점'과 '역방향'으로 Back KF 업데이트
-                Point6D inv_seg_dir = {-seg_dir.dx, -seg_dir.dy, -seg_dir.dz, 0,0,0};
-                updateKF(track->kf_back, to_merge.points.front(), inv_seg_dir);
+                // (세그먼트를 앞에 붙일 것이므로, 더 먼 쪽(Start)으로 상태 갱신)
+                Point6D meas_dir = should_reverse_segment ? seg_dir : seg_dir_inv;
+                
+                updateKF(track->kf_back, to_merge.points.front(), meas_dir);
                 track->predicted_back = predictKF(track->kf_back);
 
                 // 점 추가 (앞에 붙임)
@@ -242,7 +252,7 @@ std::map<int, Lane> LaneTracker::process(const std::map<int, Lane>& detected_lan
             }
 
         } else {
-            // New Track
+            // New Track 생성
             auto new_track = std::make_shared<Track>();
             new_track->id = track_id_counter_++;
             new_track->lane = segment;
@@ -252,9 +262,13 @@ std::map<int, Lane> LaneTracker::process(const std::map<int, Lane>& detected_lan
         }
     }
 
+    // 4. 결과 반환 및 후처리
     for (const auto& track : active_tracks) {
-        if (track->lane.points.size() < 2) continue;
+        if (track->lane.points.size() < 2) continue; 
+        
+        // 최종적으로 엉킨 점 풀기 (Reorder)
         LaneUtils::ReorderPoints(track->lane);
+        
         merged_lanes_map[track->id] = track->lane;
     }
 
