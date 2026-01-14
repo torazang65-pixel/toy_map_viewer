@@ -16,6 +16,7 @@ public:
         float distance_threshold = 0.2f; // RANSAC 거리 허용 오차 (m)
         int min_density = 5;             // 시드 점 최소 밀도
         float sweep_radius = 0.8f;       // 이 반경내 모든 점은 이미 사용됨
+        float z_tolerance = 1.0f;
     };
 
     RansacLaneGenerator(const Config& config);
