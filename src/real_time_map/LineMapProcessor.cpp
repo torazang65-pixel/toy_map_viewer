@@ -27,8 +27,16 @@ void LineMapProcessor::loadParameters() {
     nh_.param<float>("ransac_yaw_threshold", ransac_config.yaw_threshold, 10.0f);
     nh_.param<int>("ransac_min_inliers", ransac_config.min_inliers, 5);
 
+    // LaneTracker 파라미터
+    LaneTracker::Config tracker_config;
+    nh_.param<double>("kf_match_dist", tracker_config.match_distance_threshold, 1.5);
+    nh_.param<double>("kf_match_angle", tracker_config.match_angle_threshold, 20.0);
+    nh_.param<double>("kf_process_noise", tracker_config.process_noise, 0.01);
+    nh_.param<double>("kf_measure_noise", tracker_config.measurement_noise, 0.1);
+
     voxel_builder_ = std::make_unique<VoxelBuilder>(voxel_size, yaw_voxel_num);
     ransac_lane_generator_ = std::make_unique<RansacLaneGenerator>(ransac_config);
+    lane_tracker_ = std::make_unique<LaneTracker>(tracker_config);
 
     // 경로 설정
     std::string pkg_path = ros::package::getPath("toy_map_viewer");
@@ -38,11 +46,13 @@ void LineMapProcessor::loadParameters() {
     batch_dir_ = base_dir_ + "batch/";
     voxel_output_dir_ = base_dir_ + "voxel/";
     lane_output_dir_ = base_dir_ + "lanes/";
+    merged_lane_output_dir_ = base_dir_ + "merged_lanes/";
 
     if (!fs::exists(voxel_output_dir_)) {
         fs::create_directories(voxel_output_dir_);
     }
     if (!fs::exists(lane_output_dir_)) fs::create_directories(lane_output_dir_);
+    if (!fs::exists(merged_lane_output_dir_)) fs::create_directories(merged_lane_output_dir_);
 }
 
 void LineMapProcessor::run() {
@@ -95,6 +105,7 @@ void LineMapProcessor::processBatch(int batch_index) {
     std::string input_path = batch_dir_ + "batch_" + std::to_string(batch_index) + ".bin";
     std::string output_path = voxel_output_dir_ + "voxel_" + std::to_string(batch_index) + ".bin";
     std::string lane_path = lane_output_dir_ + "lane_" + std::to_string(batch_index) + ".bin";
+    std::string merged_lane_path = merged_lane_output_dir_ + "lane_" + std::to_string(batch_index) + ".bin";
 
     // 1. Load Raw Points
     auto cloud = loadBatchFile(input_path);
@@ -119,6 +130,11 @@ void LineMapProcessor::processBatch(int batch_index) {
         ROS_INFO("Batch %d: Generated %lu lanes, Total %lu points.", batch_index, lanes.size(), total_lane_points);
 
         saveToBin(lane_path, lanes);
+
+        std::map<int, Lane> merged_lanes = lane_tracker_->process(lanes);
+        ROS_INFO("Batch %d: KF Merged into %lu lanes.", batch_index, merged_lanes.size());
+        saveToBin(merged_lane_path, merged_lanes);
+
     }
 
     // 4. Save Result (현재는 Voxel만 저장)
