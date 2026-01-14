@@ -37,109 +37,166 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
 
     // lambda function
     auto expand_lane = [&](int start_node_idx, bool is_forward) -> std::vector<Point6D> {
-        std::vector<Point6D> segment_points;
-        VoxelNode* current_node = &nodes[start_node_idx];
+        std::vector<Point6D> final_projected_points;
         
-        // 후방 확장의 경우, 시드점의 Yaw와 반대 방향(180도)을 바라봐야 함
-        // 하지만 '점의 방향(Orientation)' 자체는 차선 진행 방향과 같아야 하므로
-        // Spatial Check에서만 각도를 뒤집어서 계산함.
+        // 1. 상태 변수 초기화
+        std::vector<int> current_inliers; // 현재 세그먼트에 포함된 모든 점들의 Global Index
+        current_inliers.push_back(start_node_idx); // 시드점 포함
+        
+        VoxelNode* search_center_node = &nodes[start_node_idx];
+        
+        // 초기 직선 모델 (시드점의 Yaw로 임시 초기화)
+        Eigen::Vector3f curr_p0(search_center_node->point.x, search_center_node->point.y, search_center_node->point.z);
+        float yaw = search_center_node->point.yaw;
+        if (!is_forward) yaw += M_PI; // 후방이면 반대 방향
+        Eigen::Vector3f curr_dir(std::cos(yaw), std::sin(yaw), 0.0f);
+
+        bool model_initialized = false;
 
         while (true) {
+            // 2. 주변 점 탐색 (Radius Search)
             std::vector<int> neighbor_indices;
             std::vector<float> neighbor_dists;
-            pcl::PointXYZ search_pt(current_node->point.x, current_node->point.y, current_node->point.z);
+            pcl::PointXYZ search_pt(search_center_node->point.x, search_center_node->point.y, search_center_node->point.z);
             
             if (kdtree.radiusSearch(search_pt, config_.search_radius, neighbor_indices, neighbor_dists) <= 0) break;
 
-            std::vector<VoxelNode> ransac_candidates;
-            std::vector<int> candidate_global_indices;
-            float current_yaw = current_node->point.yaw;
-
+            std::vector<int> new_candidates;
+            
             for (int ni : neighbor_indices) {
-                if (nodes[ni].visited) continue;
+                if (nodes[ni].visited) continue; // 이미 방문한 점 제외
+                // 이미 현재 리스트에 있는 점 제외 (중복 방지)
+                if (std::find(current_inliers.begin(), current_inliers.end(), ni) != current_inliers.end()) continue;
 
-                // A. Orientation Consistency (점 자체의 방향이 차선 방향과 일치하는가?)
-                float yaw_diff = std::abs(nodes[ni].point.yaw - current_yaw);
+                Eigen::Vector3f pt(nodes[ni].point.x, nodes[ni].point.y, nodes[ni].point.z);
+
+                // [핵심] 기존 직선 모델을 이용한 필터링
+                // 1) 방향 체크 (기존 로직 유지 - 역주행 방지)
+                float pt_yaw = nodes[ni].point.yaw;
+                float model_yaw = std::atan2(curr_dir.y(), curr_dir.x());
+                float yaw_diff = std::abs(pt_yaw - model_yaw);
                 while(yaw_diff > M_PI) yaw_diff -= 2 * M_PI;
                 if (std::abs(yaw_diff) > rad_threshold) continue;
 
-                /*
-                // B. Spatial Alignment Check (위치가 앞/뒤에 있는가?)
-                float dx = nodes[ni].point.x - current_node->point.x;
-                float dy = nodes[ni].point.y - current_node->point.y;
-                float dist = std::hypot(dx, dy);
+                // 2) 거리 체크 (점과 직선 사이의 거리)
+                // 만약 모델이 초기화되었다면, 직선과의 거리를 봅니다.
+                // 초기화 전이라면(첫 루프) 그냥 탐색 반경 내면 ok.
+                if (model_initialized) {
+                    // 점과 직선 사이의 거리: || (P - P0) cross Dir ||
+                    float dist_to_line = (pt - curr_p0).cross(curr_dir).norm();
+                    if (dist_to_line > 0.5f) continue; // 직선에서 50cm 이상 벗어나면 탈락 (엄격하게)
+                    
+                    // 진행 방향 체크 (내적 > 0)
+                    if ((pt - curr_p0).dot(curr_dir) < 0) continue; // 뒤에 있는 점 제외
+                }
 
-                float max_lateral_width = config_.search_radius * std::tan(rad_threshold);
-                float dynamic_spatial_limit = std::atan2(max_lateral_width, dist);
-                dynamic_spatial_limit = std::max(dynamic_spatial_limit, rad_threshold);
-
-                float conn_yaw = std::atan2(dy, dx);
-
-                // 기준 각도: 전방이면 current_yaw, 후방이면 current_yaw + PI
-                float target_spatial_yaw = is_forward ? current_yaw : (current_yaw + M_PI);
-                
-                float spatial_diff = target_spatial_yaw - conn_yaw;
-                while(spatial_diff > M_PI) spatial_diff -= 2 * M_PI;
-                while(spatial_diff < -M_PI) spatial_diff += 2 * M_PI;
-                
-                // 지정된 방향(앞 또는 뒤)의 부채꼴 안에 들어오는지 확인
-                if (std::abs(spatial_diff) > dynamic_spatial_limit) continue;
-                */
-
-                ransac_candidates.push_back(nodes[ni]);
-                candidate_global_indices.push_back(ni);
+                new_candidates.push_back(ni);
             }
 
-            if (ransac_candidates.size() < config_.min_inliers) break;
+            if (new_candidates.empty()) break;
 
-            // 로컬 피팅 수행
-            std::vector<Point6D> fitted_segment;
-            std::vector<int> inlier_local_indices;
-            fitLocalLine(ransac_candidates, fitted_segment, inlier_local_indices); // fitted_segment에는 dx,dy,dz가 포함됨
+            // 3. 후보군을 누적하고 전체에 대해 재피팅 (Refit)
+            // 임시로 합쳐서 RANSAC 돌려봄
+            std::vector<int> temp_inliers = current_inliers;
+            temp_inliers.insert(temp_inliers.end(), new_candidates.begin(), new_candidates.end());
 
-            if (fitted_segment.empty()) break;
+            if (temp_inliers.size() < config_.min_inliers) break;
 
-            // Inlier 방문 처리
-            for (int local_idx : inlier_local_indices) {
-                nodes[candidate_global_indices[local_idx]].visited = true;
+            // RANSAC 수행 (전체 점 대상)
+            pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+            for (int idx : temp_inliers) {
+                temp_cloud->push_back(pcl::PointXYZ(nodes[idx].point.x, nodes[idx].point.y, nodes[idx].point.z));
             }
 
-            // 결과 저장
-            // fitLocalLine은 항상 [t_min -> t_max] 순서로 점을 반환 (차선 진행 방향 순)
-            // 전방 확장이면: 뒤에 붙임
-            // 후방 확장이면: 앞에 붙임 (나중에 처리) -> 일단 순서대로 모으고 나중에 합침
-            segment_points.insert(segment_points.end(), fitted_segment.begin(), fitted_segment.end());
+            pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+            pcl::PointIndices::Ptr sac_inliers(new pcl::PointIndices);
+            pcl::SACSegmentation<pcl::PointXYZ> seg;
+            seg.setOptimizeCoefficients(true);
+            seg.setModelType(pcl::SACMODEL_LINE);
+            seg.setMethodType(pcl::SAC_RANSAC);
+            seg.setDistanceThreshold(config_.distance_threshold);
+            seg.setInputCloud(temp_cloud);
+            seg.segment(*sac_inliers, *coefficients);
 
-            // 다음 시드 업데이트
-            // 전방 확장: 가장 멀리 있는 점(t_max)에 해당하는 Voxel 찾기
-            // 후방 확장: 가장 뒤에 있는 점(t_min)에 해당하는 Voxel 찾기
-            // (간단히 구현하기 위해 Inlier 중 마지막/첫번째 인덱스 사용)
-            // fitLocalLine 내부 구현에 따라 inliers 순서가 보장되지 않을 수 있으므로 주의 필요
-            // 여기서는 fitted_segment의 끝점 좌표와 가장 가까운 candidate를 찾는 방식 추천
+            if (sac_inliers->indices.empty()) break;
+
+            // 4. 모델 업데이트 및 확정
+            model_initialized = true;
             
-            Point6D next_seed_pt;
-            if (is_forward) next_seed_pt = fitted_segment.back(); // 전방의 끝
-            else next_seed_pt = fitted_segment.front();           // 후방의 끝(기하학적으로 가장 뒤)
+            // 새 모델 파라미터 추출
+            curr_p0 = Eigen::Vector3f(coefficients->values[0], coefficients->values[1], coefficients->values[2]);
+            curr_dir = Eigen::Vector3f(coefficients->values[3], coefficients->values[4], coefficients->values[5]);
+            curr_dir.normalize();
 
-            // 다음 시드(Voxel) 찾기 - 가장 가까운 candidate 선택
-            int best_cand_idx = -1;
-            float min_dist_sq = std::numeric_limits<float>::max();
-            for (int idx : candidate_global_indices) {
-                float d2 = std::pow(nodes[idx].point.x - next_seed_pt.x, 2) + 
-                           std::pow(nodes[idx].point.y - next_seed_pt.y, 2);
-                if (d2 < min_dist_sq) {
-                    min_dist_sq = d2;
-                    best_cand_idx = idx;
+            // 방향 정렬 (이전 방향과 내적하여 뒤집힘 방지)
+            // (첫 루프에서는 시드 방향 따르고, 그 뒤론 관성 유지)
+            float check_yaw = (current_inliers.size() == 1) ? 
+                              (is_forward ? nodes[start_node_idx].point.yaw : nodes[start_node_idx].point.yaw + M_PI) :
+                              std::atan2(curr_dir.y(), curr_dir.x());
+            
+            // 모델의 dir이 우리가 원하는 진행 방향과 반대면 뒤집음
+            // (RANSAC은 선의 방향성(+-180)을 모르므로)
+            // 여기서는 간단히: 새로 구한 dir이 기존 확장의 방향(End - Start)과 같은지 체크
+            // 하지만 누적 피팅이므로, dir 자체의 부호만 맞춰주면 됨.
+            
+            // 5. Inlier 업데이트 (RANSAC이 걸러낸 진짜 Inlier만 남김)
+            // temp_inliers 중에서 sac_inliers 인덱스에 해당하는 것들만 추출
+            std::vector<int> refined_inliers;
+            for (int idx : sac_inliers->indices) {
+                refined_inliers.push_back(temp_inliers[idx]);
+            }
+            
+            // 만약 확장이 멈췄거나(새로운 점이 하나도 Inlier가 안 됨) 하면 종료
+            if (refined_inliers.size() <= current_inliers.size()) break;
+
+            current_inliers = refined_inliers;
+
+            // 6. 다음 탐색을 위해 '가장 끝 점' 찾기
+            // 현재 모델(직선) 상에서 가장 멀리 있는 점(t가 최대인 점)을 찾음
+            float max_t = -std::numeric_limits<float>::max();
+            int best_end_idx = -1;
+
+            for (int idx : current_inliers) {
+                Eigen::Vector3f pt(nodes[idx].point.x, nodes[idx].point.y, nodes[idx].point.z);
+                float t = (pt - curr_p0).dot(curr_dir);
+                if (t > max_t) {
+                    max_t = t;
+                    best_end_idx = idx;
                 }
             }
             
-            if (best_cand_idx != -1) {
-                current_node = &nodes[best_cand_idx];
+            if (best_end_idx != -1) {
+                search_center_node = &nodes[best_end_idx];
             } else {
-                break; // 다음 시드를 못 찾음
+                break;
             }
         }
-        return segment_points;
+
+        // 7. 최종 투영 및 저장 (Loop 종료 후 한 번만 수행)
+        if (current_inliers.size() < 2) return {};
+
+        // Inlier 점들을 방문 처리
+        for(int idx : current_inliers) nodes[idx].visited = true;
+
+        // 투영 및 정렬
+        std::vector<std::pair<float, Point6D>> sorted_pts;
+        for (int idx : current_inliers) {
+            Eigen::Vector3f pt(nodes[idx].point.x, nodes[idx].point.y, nodes[idx].point.z);
+            float t = (pt - curr_p0).dot(curr_dir);
+            Eigen::Vector3f proj = curr_p0 + t * curr_dir;
+            
+            Point6D p;
+            p.x = proj.x(); p.y = proj.y(); p.z = proj.z();
+            p.dx = curr_dir.x(); p.dy = curr_dir.y(); p.dz = curr_dir.z();
+            sorted_pts.push_back({t, p});
+        }
+        
+        std::sort(sorted_pts.begin(), sorted_pts.end(), 
+            [](const auto& a, const auto& b){ return a.first < b.first; });
+
+        for(auto& pair : sorted_pts) final_projected_points.push_back(pair.second);
+
+        return final_projected_points;
     };
 
     // 3. 메인 루프 (Seed 순회)
@@ -156,13 +213,6 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
         // 모든 점 합치기
         std::vector<Point6D> all_points;
         all_points.insert(all_points.end(), backward_pts.begin(), backward_pts.end());
-
-        // Point6D seed_p; 
-        // seed_p.x = nodes[idx].point.x; seed_p.y = nodes[idx].point.y; seed_p.z = nodes[idx].point.z;
-        // seed_p의 dx,dy,dz는 구하기 애매하므로 생략하거나 forward_pts의 첫 방향 복사
-        // if(!forward_pts.empty()) { seed_p.dx = forward_pts[0].dx; seed_p.dy = forward_pts[0].dy; seed_p.dz = forward_pts[0].dz; }
-       //  else if(!backward_pts.empty()) { seed_p.dx = backward_pts[0].dx; seed_p.dy = backward_pts[0].dy; seed_p.dz = backward_pts[0].dz; }
-        // all_points.push_back(seed_p);
 
         all_points.insert(all_points.end(), forward_pts.begin(), forward_pts.end());
 
