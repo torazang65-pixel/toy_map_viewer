@@ -237,8 +237,8 @@ void RansacLaneGenerator::fitLocalLine(const std::vector<VoxelNode>& candidates,
 
         Point6D p;
         p.x = projected_pt.x();
-        p.y = projected_pt.x();
-        p.z = projected_pt.x();
+        p.y = projected_pt.y();
+        p.z = projected_pt.z();
 
         // [핵심] 방향 정보 저장 (직선이므로 모든 점이 동일한 dir을 가짐)
         p.dx = dir.x();

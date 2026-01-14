@@ -110,11 +110,18 @@ void LineMapProcessor::processBatch(int batch_index) {
     // 3. (Future Step) Lane Generation
     if(!voxels.empty()) {
         std::map<int, Lane> lanes = ransac_lane_generator_->generate(voxels);
+
+        // 디버깅 용
+        size_t total_lane_points = 0;
+        for (const auto& pair : lanes) {
+            total_lane_points += pair.second.points.size();
+        }
+        ROS_INFO("Batch %d: Generated %lu lanes, Total %lu points.", batch_index, lanes.size(), total_lane_points);
+
         saveToBin(lane_path, lanes);
     }
 
     // 4. Save Result (현재는 Voxel만 저장)
 
-    ROS_INFO("Batch %d Processed: Raw %lu -> Voxel %lu points", 
-             batch_index, cloud->size(), voxels.size());
+    // ROS_INFO("Batch %d Processed: Raw %lu -> Voxel %lu points", batch_index, cloud->size(), voxels.size());
 }
