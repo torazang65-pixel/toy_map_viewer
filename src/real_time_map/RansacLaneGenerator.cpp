@@ -66,6 +66,12 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
                 // B. Spatial Alignment Check (위치가 앞/뒤에 있는가?)
                 float dx = nodes[ni].point.x - current_node->point.x;
                 float dy = nodes[ni].point.y - current_node->point.y;
+                float dist = std::hypot(dx, dy);
+
+                float max_lateral_width = config_.search_radius * std::tan(rad_threshold);
+                float dynamic_spatial_limit = std::atan2(max_lateral_width, dist);
+                dynamic_spatial_limit = std::max(dynamic_spatial_limit, rad_threshold);
+
                 float conn_yaw = std::atan2(dy, dx);
 
                 // 기준 각도: 전방이면 current_yaw, 후방이면 current_yaw + PI
@@ -76,7 +82,7 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
                 while(spatial_diff < -M_PI) spatial_diff += 2 * M_PI;
                 
                 // 지정된 방향(앞 또는 뒤)의 부채꼴 안에 들어오는지 확인
-                if (std::abs(spatial_diff) > rad_threshold) continue;
+                if (std::abs(spatial_diff) > dynamic_spatial_limit) continue;
 
                 ransac_candidates.push_back(nodes[ni]);
                 candidate_global_indices.push_back(ni);
