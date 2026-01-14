@@ -239,36 +239,167 @@ void LaneClusterer::sortPointsGeodesically(Lane& lane) {
     auto graph = buildPointGraph(lane.points);
     if (graph.empty()) return;
 
-    // 2. 그래프의 지름(Diameter)에 해당하는 양 끝점 찾기
-    std::pair<int, int> endpoints = findGraphEndpoints(graph);
-    int start_node = endpoints.first;
-    // int end_node = endpoints.second; // 끝점은 확인용, 실제 정렬은 start 기준 거리로 함
+    // 2. 연결 요소(Connected Components) 찾기
+    std::vector<int> component_id(graph.size(), -1);
+    std::vector<std::vector<int>> components;
 
-    if (start_node == -1) return; // 그래프가 끊어져 있거나 오류
+    for (size_t i = 0; i < graph.size(); ++i) {
+        if (component_id[i] != -1) continue;
 
-    // 3. 시작점 기준 Geodesic Distance 계산
-    std::vector<double> distances = computeDistances(graph, start_node);
+        // BFS로 연결 요소 찾기
+        std::vector<int> component;
+        std::queue<int> bfs_q;
+        bfs_q.push(static_cast<int>(i));
+        component_id[i] = static_cast<int>(components.size());
 
-    // 4. 거리 순으로 정렬
-    // (index, distance) 쌍을 만들어서 정렬
-    std::vector<std::pair<double, int>> sort_helper;
-    sort_helper.reserve(lane.points.size());
-    for (size_t i = 0; i < lane.points.size(); ++i) {
-        // 도달 불가능한 점(INF)은 맨 뒤로 보내거나 제외
-        if (distances[i] == std::numeric_limits<double>::max()) continue;
-        sort_helper.push_back({distances[i], static_cast<int>(i)});
+        while (!bfs_q.empty()) {
+            int curr = bfs_q.front(); bfs_q.pop();
+            component.push_back(curr);
+
+            for (const auto& neighbor : graph[curr].neighbors) {
+                int next = neighbor.first;
+                if (component_id[next] == -1) {
+                    component_id[next] = static_cast<int>(components.size());
+                    bfs_q.push(next);
+                }
+            }
+        }
+        components.push_back(component);
     }
 
-    std::sort(sort_helper.begin(), sort_helper.end());
+    // 3. 각 연결 요소를 geodesic sort로 정렬
+    std::vector<std::vector<Point6D>> sorted_components;
+    sorted_components.reserve(components.size());
 
-    // 5. 정렬된 순서대로 Lane 재구성
-    std::vector<Point6D> sorted_points;
-    sorted_points.reserve(sort_helper.size());
-    for (const auto& p : sort_helper) {
-        sorted_points.push_back(lane.points[p.second]);
+    for (const auto& comp : components) {
+        if (comp.empty()) continue;
+
+        if (comp.size() == 1) {
+            // 단일 점 컴포넌트는 그대로 추가
+            std::vector<Point6D> single_pt;
+            single_pt.push_back(lane.points[comp[0]]);
+            sorted_components.push_back(single_pt);
+            continue;
+        }
+
+        // 컴포넌트 내에서 endpoints 찾기 (2-pass: 임의점 -> 가장 먼 점 u -> 가장 먼 점 v)
+        auto comp_distances = computeDistances(graph, comp[0]);
+
+        int u = comp[0];
+        double max_dist = 0;
+        for (int idx : comp) {
+            if (comp_distances[idx] != std::numeric_limits<double>::max() &&
+                comp_distances[idx] > max_dist) {
+                max_dist = comp_distances[idx];
+                u = idx;
+            }
+        }
+
+        auto distances_from_u = computeDistances(graph, u);
+
+        // 거리 순으로 정렬
+        std::vector<std::pair<double, int>> sort_helper;
+        sort_helper.reserve(comp.size());
+        for (int idx : comp) {
+            if (distances_from_u[idx] != std::numeric_limits<double>::max()) {
+                sort_helper.push_back({distances_from_u[idx], idx});
+            } else {
+                // 도달 불가 점도 맨 뒤에 추가 (버리지 않음)
+                sort_helper.push_back({std::numeric_limits<double>::max(), idx});
+            }
+        }
+        std::sort(sort_helper.begin(), sort_helper.end());
+
+        std::vector<Point6D> sorted_comp;
+        sorted_comp.reserve(sort_helper.size());
+        for (const auto& p : sort_helper) {
+            sorted_comp.push_back(lane.points[p.second]);
+        }
+        sorted_components.push_back(sorted_comp);
     }
 
-    lane.points = std::move(sorted_points);
+    // 4. 연결 요소들을 순서대로 연결 (Greedy: 가장 가까운 endpoint끼리 연결)
+    if (sorted_components.empty()) return;
+
+    std::vector<bool> used(sorted_components.size(), false);
+    std::vector<Point6D> final_points;
+
+    // 첫 번째 컴포넌트 선택 (가장 큰 것)
+    int first_comp = 0;
+    size_t max_size = 0;
+    for (size_t i = 0; i < sorted_components.size(); ++i) {
+        if (sorted_components[i].size() > max_size) {
+            max_size = sorted_components[i].size();
+            first_comp = static_cast<int>(i);
+        }
+    }
+
+    final_points = sorted_components[first_comp];
+    used[first_comp] = true;
+
+    // 나머지 컴포넌트들을 가장 가까운 순서로 연결
+    for (size_t iter = 1; iter < sorted_components.size(); ++iter) {
+        int best_comp = -1;
+        double best_dist = std::numeric_limits<double>::max();
+        bool append_to_back = true;
+        bool reverse_comp = false;
+
+        const Point6D& front = final_points.front();
+        const Point6D& back = final_points.back();
+
+        for (size_t i = 0; i < sorted_components.size(); ++i) {
+            if (used[i] || sorted_components[i].empty()) continue;
+
+            const Point6D& comp_front = sorted_components[i].front();
+            const Point6D& comp_back = sorted_components[i].back();
+
+            // 4가지 연결 방법 중 최소 거리 선택
+            // back -> comp_front (append, no reverse)
+            double d1 = LaneUtils::GetDistance(back, comp_front);
+            if (d1 < best_dist) {
+                best_dist = d1; best_comp = static_cast<int>(i);
+                append_to_back = true; reverse_comp = false;
+            }
+
+            // back -> comp_back (append, reverse)
+            double d2 = LaneUtils::GetDistance(back, comp_back);
+            if (d2 < best_dist) {
+                best_dist = d2; best_comp = static_cast<int>(i);
+                append_to_back = true; reverse_comp = true;
+            }
+
+            // front -> comp_back (prepend, no reverse)
+            double d3 = LaneUtils::GetDistance(front, comp_back);
+            if (d3 < best_dist) {
+                best_dist = d3; best_comp = static_cast<int>(i);
+                append_to_back = false; reverse_comp = false;
+            }
+
+            // front -> comp_front (prepend, reverse)
+            double d4 = LaneUtils::GetDistance(front, comp_front);
+            if (d4 < best_dist) {
+                best_dist = d4; best_comp = static_cast<int>(i);
+                append_to_back = false; reverse_comp = true;
+            }
+        }
+
+        if (best_comp == -1) break;
+
+        used[best_comp] = true;
+        auto& comp_to_add = sorted_components[best_comp];
+
+        if (reverse_comp) {
+            std::reverse(comp_to_add.begin(), comp_to_add.end());
+        }
+
+        if (append_to_back) {
+            final_points.insert(final_points.end(), comp_to_add.begin(), comp_to_add.end());
+        } else {
+            final_points.insert(final_points.begin(), comp_to_add.begin(), comp_to_add.end());
+        }
+    }
+
+    lane.points = std::move(final_points);
 }
 
 std::vector<LaneClusterer::GraphNode> LaneClusterer::buildPointGraph(const std::vector<Point6D>& points) {
