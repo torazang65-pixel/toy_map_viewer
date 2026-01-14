@@ -1,4 +1,5 @@
 #include "real_time_map/RansacLaneGenerator.h"
+#include "toy_map_viewer/LaneUtils.h"
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
@@ -13,20 +14,18 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
     std::map<int, Lane> lanes;
     if (voxels.empty()) return lanes;
 
-    // 1. 데이터 준비 (복사 및 인덱싱)
+    // 1. 데이터 준비 및 KD-Tree 구성
     std::vector<VoxelNode> nodes;
     nodes.reserve(voxels.size());
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-
     for (int i = 0; i < voxels.size(); ++i) {
-        nodes.push_back({i, voxels[i], false});
+        nodes.push_back({i, voxels[i], false}); // visited = false
         cloud->push_back(pcl::PointXYZ(voxels[i].x, voxels[i].y, voxels[i].z));
     }
-
     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
     kdtree.setInputCloud(cloud);
 
-    // 2. 밀도 순으로 시드 정렬
+    // 2. 시드 정렬 (밀도 순, 기존과 동일)
     std::vector<int> sorted_indices(nodes.size());
     std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
     std::sort(sorted_indices.begin(), sorted_indices.end(), [&](int a, int b) {
@@ -36,55 +35,48 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
     int lane_id_counter = 0;
     float rad_threshold = config_.yaw_threshold * M_PI / 180.0f;
 
-    // 3. Incremental RANSAC Loop
-    for (int idx : sorted_indices) {
-        if (nodes[idx].visited) continue;
-        if (nodes[idx].point.density < config_.min_density) continue;
-
-        // 새로운 차선 시작
-        Lane current_lane;
-        current_lane.id = lane_id_counter++;
-        current_lane.type = 0; // Unknown
-        current_lane.explicit_lane = true;
-        current_lane.valid = true;
-
-        // 시드 포인트 설정
-        VoxelNode* current_node = &nodes[idx];
+    // lambda function
+    auto expand_lane = [&](int start_node_idx, bool is_forward) -> std::vector<Point6D> {
+        std::vector<Point6D> segment_points;
+        VoxelNode* current_node = &nodes[start_node_idx];
         
-        // 양방향 확장 (일단은 단방향 전진만 구현, 필요시 loop로 양방향 가능)
+        // 후방 확장의 경우, 시드점의 Yaw와 반대 방향(180도)을 바라봐야 함
+        // 하지만 '점의 방향(Orientation)' 자체는 차선 진행 방향과 같아야 하므로
+        // Spatial Check에서만 각도를 뒤집어서 계산함.
+
         while (true) {
             std::vector<int> neighbor_indices;
             std::vector<float> neighbor_dists;
-            
-            // 주변 점 탐색
             pcl::PointXYZ search_pt(current_node->point.x, current_node->point.y, current_node->point.z);
-            if (kdtree.radiusSearch(search_pt, config_.search_radius, neighbor_indices, neighbor_dists) <= 0) {
-                break;
-            }
+            
+            if (kdtree.radiusSearch(search_pt, config_.search_radius, neighbor_indices, neighbor_dists) <= 0) break;
 
-            // 후보군 필터링 (방향성 체크 + 미방문)
             std::vector<VoxelNode> ransac_candidates;
             std::vector<int> candidate_global_indices;
-            float seed_yaw = current_node->point.yaw;
+            float current_yaw = current_node->point.yaw;
 
             for (int ni : neighbor_indices) {
                 if (nodes[ni].visited) continue;
 
-                // Yaw 차이 계산 (각도 정규화 고려)
-                float diff = std::abs(nodes[ni].point.yaw - seed_yaw);
-                while(diff > M_PI) diff -= 2 * M_PI;
-                if (std::abs(diff) > rad_threshold) continue;
+                // A. Orientation Consistency (점 자체의 방향이 차선 방향과 일치하는가?)
+                float yaw_diff = std::abs(nodes[ni].point.yaw - current_yaw);
+                while(yaw_diff > M_PI) yaw_diff -= 2 * M_PI;
+                if (std::abs(yaw_diff) > rad_threshold) continue;
 
-                // Spatial Alignment Check
+                // B. Spatial Alignment Check (위치가 앞/뒤에 있는가?)
                 float dx = nodes[ni].point.x - current_node->point.x;
-                float dy = nodes[ni].point.x - current_node->point.y;
+                float dy = nodes[ni].point.y - current_node->point.y;
+                float conn_yaw = std::atan2(dy, dx);
 
-                float conn_yaw = std::atan(dy,dx);
+                // 기준 각도: 전방이면 current_yaw, 후방이면 current_yaw + PI
+                float target_spatial_yaw = is_forward ? current_yaw : (current_yaw + M_PI);
                 
-                float spatial_diff = std::abs(conn_yaw - seed_yaw);
+                float spatial_diff = target_spatial_yaw - conn_yaw;
                 while(spatial_diff > M_PI) spatial_diff -= 2 * M_PI;
-                spatial_diff = std::abs(spatial_diff);
-                if(spatial_diff > rad_threshold) continue;
+                while(spatial_diff < -M_PI) spatial_diff += 2 * M_PI;
+                
+                // 지정된 방향(앞 또는 뒤)의 부채꼴 안에 들어오는지 확인
+                if (std::abs(spatial_diff) > rad_threshold) continue;
 
                 ransac_candidates.push_back(nodes[ni]);
                 candidate_global_indices.push_back(ni);
@@ -92,37 +84,91 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
 
             if (ransac_candidates.size() < config_.min_inliers) break;
 
-            // 로컬 라인 피팅
-            std::vector<Point6D> fitted_points;
+            // 로컬 피팅 수행
+            std::vector<Point6D> fitted_segment;
             std::vector<int> inlier_local_indices;
-            
-            fitLocalLine(ransac_candidates, fitted_points, inlier_local_indices);
+            fitLocalLine(ransac_candidates, fitted_segment, inlier_local_indices); // fitted_segment에는 dx,dy,dz가 포함됨
 
-            if (fitted_points.size() < 2) break; // 피팅 실패
+            if (fitted_segment.empty()) break;
 
-            // 결과 저장 및 상태 업데이트
-            for (const auto& pt : fitted_points) {
-                current_lane.points.push_back(pt);
-            }
-
-            // Inlier들을 방문 처리
+            // Inlier 방문 처리
             for (int local_idx : inlier_local_indices) {
-                int global_idx = candidate_global_indices[local_idx];
-                nodes[global_idx].visited = true;
+                nodes[candidate_global_indices[local_idx]].visited = true;
             }
 
-            // 다음 확장을 위한 시드 업데이트 (세그먼트의 끝점과 가장 가까운 방문 안 된 점 찾기..는 복잡하므로)
-            // 간단하게: 세그먼트의 끝점 위치를 기준으로 다시 검색
-            // 실제 구현에서는 fitted_points.back()에 해당하는 VoxelNode를 찾아야 함.
-            // 여기서는 근사적으로 가장 마지막 Inlier를 다음 시드로 잡음
-            int last_inlier_global_idx = candidate_global_indices[inlier_local_indices.back()];
-            current_node = &nodes[last_inlier_global_idx];
-            
-            // 만약 더이상 확장할 곳이 없으면 break (이 부분은 정교한 로직 필요)
-            // 여기서는 단순 루프로 진행
-        }
+            // 결과 저장
+            // fitLocalLine은 항상 [t_min -> t_max] 순서로 점을 반환 (차선 진행 방향 순)
+            // 전방 확장이면: 뒤에 붙임
+            // 후방 확장이면: 앞에 붙임 (나중에 처리) -> 일단 순서대로 모으고 나중에 합침
+            segment_points.insert(segment_points.end(), fitted_segment.begin(), fitted_segment.end());
 
+            // 다음 시드 업데이트
+            // 전방 확장: 가장 멀리 있는 점(t_max)에 해당하는 Voxel 찾기
+            // 후방 확장: 가장 뒤에 있는 점(t_min)에 해당하는 Voxel 찾기
+            // (간단히 구현하기 위해 Inlier 중 마지막/첫번째 인덱스 사용)
+            // fitLocalLine 내부 구현에 따라 inliers 순서가 보장되지 않을 수 있으므로 주의 필요
+            // 여기서는 fitted_segment의 끝점 좌표와 가장 가까운 candidate를 찾는 방식 추천
+            
+            Point6D next_seed_pt;
+            if (is_forward) next_seed_pt = fitted_segment.back(); // 전방의 끝
+            else next_seed_pt = fitted_segment.front();           // 후방의 끝(기하학적으로 가장 뒤)
+
+            // 다음 시드(Voxel) 찾기 - 가장 가까운 candidate 선택
+            int best_cand_idx = -1;
+            float min_dist_sq = std::numeric_limits<float>::max();
+            for (int idx : candidate_global_indices) {
+                float d2 = std::pow(nodes[idx].point.x - next_seed_pt.x, 2) + 
+                           std::pow(nodes[idx].point.y - next_seed_pt.y, 2);
+                if (d2 < min_dist_sq) {
+                    min_dist_sq = d2;
+                    best_cand_idx = idx;
+                }
+            }
+            
+            if (best_cand_idx != -1) {
+                current_node = &nodes[best_cand_idx];
+            } else {
+                break; // 다음 시드를 못 찾음
+            }
+        }
+        return segment_points;
+    };
+
+    // 3. 메인 루프 (Seed 순회)
+    for (int idx : sorted_indices) {
+        if (nodes[idx].visited) continue;
+        if (nodes[idx].point.density < config_.min_density) continue;
+
+        nodes[idx].visited = true; // 시드 방문 처리
+
+        // 양방향 확장 수행
+        std::vector<Point6D> forward_pts = expand_lane(idx, true);
+        std::vector<Point6D> backward_pts = expand_lane(idx, false);
+        
+        // 모든 점 합치기
+        std::vector<Point6D> all_points;
+        all_points.insert(all_points.end(), backward_pts.begin(), backward_pts.end());
+
+        Point6D seed_p; 
+        seed_p.x = nodes[idx].point.x; seed_p.y = nodes[idx].point.y; seed_p.z = nodes[idx].point.z;
+        // seed_p의 dx,dy,dz는 구하기 애매하므로 생략하거나 forward_pts의 첫 방향 복사
+        if(!forward_pts.empty()) { seed_p.dx = forward_pts[0].dx; seed_p.dy = forward_pts[0].dy; seed_p.dz = forward_pts[0].dz; }
+        else if(!backward_pts.empty()) { seed_p.dx = backward_pts[0].dx; seed_p.dy = backward_pts[0].dy; seed_p.dz = backward_pts[0].dz; }
+        all_points.push_back(seed_p);
+
+        all_points.insert(all_points.end(), forward_pts.begin(), forward_pts.end());
+
+        // 위치 기반 정렬
+        current_lane.points = all_points;
         if (current_lane.points.size() >= 2) {
+            Lane current_lane;
+            current_lane.id = lane_id_counter++;
+            current_lane.points = all_points;
+            current_lane.explicit_lane = true;
+            current_lane.valid = true;
+
+            LaneUtils::ReorderPoints(current_lane);
+
             lanes[current_lane.id] = current_lane;
         }
     }
