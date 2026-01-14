@@ -27,6 +27,17 @@ void LineMapProcessor::loadParameters() {
     nh_.param<float>("ransac_yaw_threshold", ransac_config.yaw_threshold, 10.0f);
     nh_.param<int>("ransac_min_inliers", ransac_config.min_inliers, 5);
 
+    // GreedyLaneGenerator 파라미터
+    nh_.param<bool>("use_greedy_generator", use_greedy_generator_, true); // 기본값 true로 설정하여 테스트
+
+    GreedyLaneGenerator::Config greedy_config;
+    nh_.param<float>("greedy_neighbor_dist", greedy_config.neighbor_dist_thresh, 2.0f);
+    nh_.param<float>("greedy_cylinder_width", greedy_config.cylinder_search_width, 1.0f);
+    nh_.param<float>("greedy_drop_width", greedy_config.drop_width, 1.0f);
+    nh_.param<int>("greedy_min_density", greedy_config.min_density, 5);
+    nh_.param<float>("greedy_alpha", greedy_config.alpha, 0.7f);
+    nh_.param<float>("greedy_beta", greedy_config.beta, 0.9f);
+
     // LaneTracker 파라미터
     LaneTracker::Config tracker_config;
     nh_.param<double>("kf_match_dist", tracker_config.match_distance_threshold, 1.5);
@@ -36,6 +47,7 @@ void LineMapProcessor::loadParameters() {
 
     voxel_builder_ = std::make_unique<VoxelBuilder>(voxel_size, yaw_voxel_num);
     ransac_lane_generator_ = std::make_unique<RansacLaneGenerator>(ransac_config);
+    greedy_lane_generator_ = std::make_unique<GreedyLaneGenerator>(greedy_config);
     lane_tracker_ = std::make_unique<LaneTracker>(tracker_config);
 
     // 경로 설정
@@ -120,7 +132,14 @@ void LineMapProcessor::processBatch(int batch_index) {
 
     // 3. (Future Step) Lane Generation
     if(!voxels.empty()) {
-        std::map<int, Lane> lanes = ransac_lane_generator_->generate(voxels);
+        std::map<int, Lane> lanes;
+
+        if (use_greedy_generator_) {
+            ROS_INFO("Generating lanes using Greedy Algorithm");
+            lanes = greedy_lane_generator_->generate(voxels);
+        } else {
+            lanes = ransac_lane_generator_->generate(voxels);
+        }
 
         // 디버깅 용
         size_t total_lane_points = 0;
