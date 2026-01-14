@@ -43,7 +43,7 @@ Visualization Manager:
         {}
       Queue Size: 100
       Value: false
-    - Alpha: 1
+    - Alpha: 0.20000000298023224
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
         Max Value: 10
@@ -53,7 +53,7 @@ Visualization Manager:
       Channel Name: intensity
       Class: rviz/PointCloud2
       Color: 255; 255; 255
-      Color Transformer: Intensity
+      Color Transformer: FlatColor
       Decay Time: 0
       Enabled: true
       Invert Rainbow: false
@@ -64,7 +64,7 @@ Visualization Manager:
       Queue Size: 10
       Selectable: true
       Size (Pixels): 3
-      Size (m): 0.07000000029802322
+      Size (m): 0.5
       Style: Flat Squares
       Topic: /voxel_animation
       Unreliable: false
@@ -72,13 +72,21 @@ Visualization Manager:
       Use rainbow: true
       Value: true
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /lane_animation
       Name: MarkerArray
       Namespaces:
-        generated_lanes: true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
+    - Class: rviz/MarkerArray
+      Enabled: false
+      Marker Topic: /merged_lane_animation
+      Name: MarkerArray
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -107,7 +115,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 81.130859375
+      Distance: 192.69332885742188
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -115,17 +123,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 143.47079467773438
-        Y: 25.97242546081543
-        Z: -1.9830626115435734e-05
+        X: 89.60121154785156
+        Y: 37.36811065673828
+        Z: 6.872254743939266e-06
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7853981852531433
+      Pitch: 1.2403978109359741
       Target Frame: <Fixed Frame>
-      Yaw: 0.7853981852531433
+      Yaw: 1.2053978443145752
     Saved: ~
 Window Geometry:
   Displays:
