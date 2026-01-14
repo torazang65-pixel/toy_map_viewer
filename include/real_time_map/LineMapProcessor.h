@@ -4,6 +4,7 @@
 #include <string>
 #include <memory> // for std::unique_ptr
 #include "real_time_map/VoxelBuilder.h"
+#include "real_time_map/RansacLaneGenerator.h"
 
 class LineMapProcessor {
 public:
@@ -18,13 +19,13 @@ private:
     
     // 파일 입출력 헬퍼
     pcl::PointCloud<pcl::PointXYZI>::Ptr loadBatchFile(const std::string& path);
-    void saveVoxelFile(const std::string& path, const std::vector<VoxelPoint>& voxels);
 
 private:
     ros::NodeHandle nh_;
     
     // 모듈
     std::unique_ptr<VoxelBuilder> voxel_builder_;
+    std::unique_ptr<RansacLaneGenerator> ransac_lane_generator_;
     // std::unique_ptr<LaneGenerator> lane_generator_; // 추후 추가 예정
 
     // 파라미터 및 경로
@@ -32,4 +33,5 @@ private:
     std::string base_dir_;
     std::string batch_dir_;
     std::string voxel_output_dir_;
+    std::string lane_output_dir_;
 };

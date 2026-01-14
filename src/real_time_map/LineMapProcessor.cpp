@@ -1,5 +1,6 @@
 #include "real_time_map/LineMapProcessor.h"
 #include "common/BinSaver.h"
+#include "common/DataTypes.h"
 #include <ros/package.h>
 #include <filesystem>
 #include <fstream>
@@ -17,12 +18,17 @@ void LineMapProcessor::loadParameters() {
     // VoxelBuilder 파라미터
     float voxel_size;
     int yaw_voxel_num;
-    
     nh_.param<float>("voxel_size", voxel_size, 0.5f);
     nh_.param<int>("yaw_voxel_num", yaw_voxel_num, 36);
 
-    // VoxelBuilder 인스턴스 생성
+    // RansacLaneGenerator 파라미터
+    RansacLaneGenerator::Config ransac_config;
+    nh_.param<float>("ransac_search_radius", ransac_config.search_radius, 2.0f);
+    nh_.param<float>("ransac_yaw_threshold", ransac_config.yaw_threshold, 30.0f);
+    nh_.param<int>("ransac_min_inliers", ransac_config.min_inliers, 5);
+
     voxel_builder_ = std::make_unique<VoxelBuilder>(voxel_size, yaw_voxel_num);
+    ransac_lane_generator_ = std::make_unique<RansacLaneGenerator>(ransac_config);
 
     // 경로 설정
     std::string pkg_path = ros::package::getPath("toy_map_viewer");
@@ -31,10 +37,12 @@ void LineMapProcessor::loadParameters() {
     base_dir_ = pkg_path + "/" + converted_folder + std::to_string(start_index_) + "/";
     batch_dir_ = base_dir_ + "batch/";
     voxel_output_dir_ = base_dir_ + "voxel/";
+    lane_output_dir_ = base_dir_ + "lanes/";
 
     if (!fs::exists(voxel_output_dir_)) {
         fs::create_directories(voxel_output_dir_);
     }
+    if (!fs::exists(lane_output_dir_)) fs::create_directories(lane_output_dir_);
 }
 
 void LineMapProcessor::run() {
@@ -86,6 +94,7 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr LineMapProcessor::loadBatchFile(const std::
 void LineMapProcessor::processBatch(int batch_index) {
     std::string input_path = batch_dir_ + "batch_" + std::to_string(batch_index) + ".bin";
     std::string output_path = voxel_output_dir_ + "voxel_" + std::to_string(batch_index) + ".bin";
+    std::string lane_path = lane_output_dir_ + "lane_" + std::to_string(batch_index) + ".bin";
 
     // 1. Load Raw Points
     auto cloud = loadBatchFile(input_path);
@@ -99,7 +108,10 @@ void LineMapProcessor::processBatch(int batch_index) {
     saveVoxelToBin(output_path, voxels);
 
     // 3. (Future Step) Lane Generation
-    // auto lanes = lane_generator_->generate(voxels);
+    if(!voxels.empty()) {
+        std::map<int, Lane> lanes = ransac_lane_generator_->generate(voxels);
+        saveToBin(lane_path, lanes);
+    }
 
     // 4. Save Result (현재는 Voxel만 저장)
 
