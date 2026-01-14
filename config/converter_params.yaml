@@ -33,7 +33,7 @@ ransac_yaw_threshold: 10.0
 ransac_min_inliers: 3
 
 # Lane Generation Method Switch
-use_greedy_generator: true
+use_greedy_generator: false
 
 # Greedy Polyline Generator Params
 greedy_neighbor_dist: 2.5

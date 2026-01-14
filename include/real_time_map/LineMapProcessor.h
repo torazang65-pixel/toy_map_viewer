@@ -6,6 +6,7 @@
 #include "real_time_map/VoxelBuilder.h"
 #include "real_time_map/RansacLaneGenerator.h"
 #include "real_time_map/LaneTracker.h"
+#include "real_time_map/GreedyLaneGenerator.h"
 
 class LineMapProcessor {
 public:
@@ -28,6 +29,7 @@ private:
     std::unique_ptr<VoxelBuilder> voxel_builder_;
     std::unique_ptr<RansacLaneGenerator> ransac_lane_generator_;
     std::unique_ptr<LaneTracker> lane_tracker_;
+    std::unique_ptr<GreedyLaneGenerator> greedy_lane_generator_;
     // std::unique_ptr<LaneGenerator> lane_generator_; // 추후 추가 예정
 
     // 파라미터 및 경로
@@ -37,4 +39,5 @@ private:
     std::string voxel_output_dir_;
     std::string lane_output_dir_;
     std::string merged_lane_output_dir_;
+    bool use_greedy_generator_;
 };
