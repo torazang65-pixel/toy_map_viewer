@@ -75,10 +75,11 @@ public:
         layers_.push_back(std::make_shared<PointCloudLayer>(
             "Show Voxel (Filtered)", nh, "/voxel_animation", "voxel", "voxel", true, false));
 
+        // (3)
         layers_.push_back(std::make_shared<LaneLayer>("Show Generated Lane", nh, "/lane_animation", "lanes", "lane"));
 
-        // (추후 확장) Lane Layer 예시
-        // layers_.push_back(std::make_shared<LaneLayer>("Show Lane", nh, ...));
+        // (4)
+        layers_.push_back(std::make_shared<LaneLayer>("Show Merged Lane", nh, "/merged_lane_animation", "merged_lanes", "lane"));
 
         // 2. 메뉴 초기화
         initMenu();
