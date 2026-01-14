@@ -157,12 +157,12 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
         std::vector<Point6D> all_points;
         all_points.insert(all_points.end(), backward_pts.begin(), backward_pts.end());
 
-        Point6D seed_p; 
-        seed_p.x = nodes[idx].point.x; seed_p.y = nodes[idx].point.y; seed_p.z = nodes[idx].point.z;
+        // Point6D seed_p; 
+        // seed_p.x = nodes[idx].point.x; seed_p.y = nodes[idx].point.y; seed_p.z = nodes[idx].point.z;
         // seed_p의 dx,dy,dz는 구하기 애매하므로 생략하거나 forward_pts의 첫 방향 복사
-        if(!forward_pts.empty()) { seed_p.dx = forward_pts[0].dx; seed_p.dy = forward_pts[0].dy; seed_p.dz = forward_pts[0].dz; }
-        else if(!backward_pts.empty()) { seed_p.dx = backward_pts[0].dx; seed_p.dy = backward_pts[0].dy; seed_p.dz = backward_pts[0].dz; }
-        all_points.push_back(seed_p);
+        // if(!forward_pts.empty()) { seed_p.dx = forward_pts[0].dx; seed_p.dy = forward_pts[0].dy; seed_p.dz = forward_pts[0].dz; }
+       //  else if(!backward_pts.empty()) { seed_p.dx = backward_pts[0].dx; seed_p.dy = backward_pts[0].dy; seed_p.dz = backward_pts[0].dz; }
+        // all_points.push_back(seed_p);
 
         all_points.insert(all_points.end(), forward_pts.begin(), forward_pts.end());
 
@@ -233,14 +233,12 @@ void RansacLaneGenerator::fitLocalLine(const std::vector<VoxelNode>& candidates,
         // P_proj = P0 + t * Dir -> t = (P - P0) dot Dir
         float t = (pt_vec - p0).dot(dir);
         
+        Eigen::Vector3f projected_pt = p0 + t * dir;
+
         Point6D p;
-        // 원래 좌표를 그대로 쓸지, 직선에 투영된 좌표를 쓸지 결정 (보통 투영된 좌표가 깔끔함)
-        // 여기서는 원래 좌표를 사용하되, 필요시 아래 주석 해제하여 투영 좌표 사용 가능
-        // Eigen::Vector3f projected_pt = p0 + t * dir;
-        // p.x = projected_pt.x(); p.y = projected_pt.y(); p.z = projected_pt.z();
-        p.x = pt_pcl.x;
-        p.y = pt_pcl.y;
-        p.z = pt_pcl.z;
+        p.x = projected_pt.x();
+        p.y = projected_pt.x();
+        p.z = projected_pt.x();
 
         // [핵심] 방향 정보 저장 (직선이므로 모든 점이 동일한 dir을 가짐)
         p.dx = dir.x();
