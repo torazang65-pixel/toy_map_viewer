@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
     ROS_INFO("#############################################");
     ROS_INFO("#        Unified Converter Node Start       #");
     ROS_INFO("#############################################");
-    /*
+    
     // 1. MapConverter 실행
     {
         ROS_INFO("[Step 1] Running MapConverter...");
@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
         batch_saver.run();
         ROS_INFO("[Step 3] BatchSaver Completed");
     }
-    */
+    
     // 4. LineMapProcessor
     
     {
