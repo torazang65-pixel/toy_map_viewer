@@ -32,6 +32,17 @@ ransac_search_radius: 2.0
 ransac_yaw_threshold: 10.0
 ransac_min_inliers: 3
 
+# Lane Generation Method Switch
+use_greedy_generator: true
+
+# Greedy Polyline Generator Params
+greedy_neighbor_dist: 2.5
+greedy_cylinder_width: 1.5
+greedy_drop_width: 1.0
+greedy_min_density: 5
+greedy_alpha: 0.7
+greedy_beta: 0.9
+
 # KF merge
 kf_match_dist: 2
 kf_match_angle: 20.0
