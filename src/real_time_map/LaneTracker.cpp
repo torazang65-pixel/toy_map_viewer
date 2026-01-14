@@ -74,9 +74,12 @@ void LaneTracker::updateKF(cv::KalmanFilter& kf, const Point6D& pt, const Point6
 }
 
 double LaneTracker::getAngleDiff(const Point6D& dir1, const Point6D& dir2) {
-    double dot = dir1.dx * dir2.dx + dir1.dy * dir2.dy + dir1.dz * dir2.dz;
-    dot = std::max(-1.0, std::min(1.0, dot));
-    return std::acos(dot) * 180.0 / M_PI;
+    double dot = dir1.dx * dir2.dx + dir1.dy * dir2.dy;
+    double mag1 = std::sqrt(dir1.dx * dir1.dx + dir1.dy * dir1.dy);
+    double mag2 = std::sqrt(dir2.dx * dir2.dx + dir2.dy * dir2.dy);
+    if (mag1 < 1e-6 || mag2 < 1e-6) return 0.0;
+    double val = dot / (mag1 * mag2);
+    return std::acos(std::max(-1.0, std::min(1.0, val))) * 180.0 / M_PI;
 }
 
 Point6D LaneTracker::calculateBatchCenter(const std::vector<Lane>& lanes) {
@@ -144,59 +147,63 @@ std::map<int, Lane> LaneTracker::process(const std::map<int, Lane>& detected_lan
             // ---------------------------------------------------
             // Case A: Front Extension (기존 트랙의 머리 + 새 세그먼트)
             // ---------------------------------------------------
-            Point6D pred_f = track->predicted_front;
-            Point6D trk_dir_f; // 트랙 머리 방향
-            trk_dir_f.dx = track->state_front.at<float>(3);
-            trk_dir_f.dy = track->state_front.at<float>(4);
-            trk_dir_f.dz = track->state_front.at<float>(5);
+            Point6D seg_dir; 
+            double len = LaneUtils::GetDistance(seg_start, seg_end);
+            if(len < 1e-6) len = 1.0;
+            seg_dir.dx = (seg_end.x - seg_start.x) / len;
+            seg_dir.dy = (seg_end.y - seg_start.y) / len;
+            seg_dir.dz = (seg_end.z - seg_start.z) / len;
+            // 세그먼트의 역방향
+            Point6D seg_dir_inv = {-seg_dir.dx, -seg_dir.dy, -seg_dir.dz, 0,0,0};
 
-            // A-1. 정방향 연결 (Track Head -> Seg Start)
-            double d_f_normal = LaneUtils::GetDistance(pred_f, seg_start);
-            // A-2. 역방향 연결 (Track Head -> Seg End) - 세그먼트가 뒤집혀 들어온 경우
-            double d_f_reverse = LaneUtils::GetDistance(pred_f, seg_end);
+            for (int i = 0; i < active_tracks.size(); ++i) {
+                auto& track = active_tracks[i];
 
-            double d_front = d_f_normal;
-            bool rev_front = false;
-            if (d_f_reverse < d_f_normal) { d_front = d_f_reverse; rev_front = true; }
-
-            // 각도 검사 (Front)
-            Point6D check_dir_f = rev_front ? Point6D{-seg_dir.dx, -seg_dir.dy, -seg_dir.dz, 0,0,0} : seg_dir;
-            if (getAngleDiff(trk_dir_f, check_dir_f) <= config_.match_angle_threshold) {
-                if (d_front < config_.match_distance_threshold && d_front < min_dist) {
-                    min_dist = d_front;
-                    best_track_idx = i;
-                    match_type = 1; // Front Match
-                    should_reverse_segment = rev_front;
+                // --- Front Check ---
+                // Track: Head에서 나가는 방향 (Forward)
+                // Seg: Start가 붙으면 Forward(seg_dir), End가 붙으면 Backward(seg_dir_inv)
+                Point6D trk_dir_f; 
+                trk_dir_f.dx = track->state_front.at<float>(3);
+                trk_dir_f.dy = track->state_front.at<float>(4);
+                
+                double d_f_normal = LaneUtils::GetDistance(track->predicted_front, seg_start);
+                double d_f_reverse = LaneUtils::GetDistance(track->predicted_front, seg_end);
+                
+                bool is_front_reverse = (d_f_reverse < d_f_normal);
+                double d_front = is_front_reverse ? d_f_reverse : d_f_normal;
+                
+                // 비교: 트랙 방향 vs (세그먼트가 연결되면 뻗어나갈 방향)
+                Point6D check_f = is_front_reverse ? seg_dir_inv : seg_dir;
+                
+                if (getAngleDiff(trk_dir_f, check_f) <= config_.match_angle_threshold) {
+                    if (d_front < config_.match_distance_threshold && d_front < min_dist) {
+                        min_dist = d_front;
+                        best_track_idx = i;
+                        match_type = 1;
+                        should_reverse_segment = is_front_reverse;
+                    }
                 }
-            }
 
-            // ---------------------------------------------------
-            // Case B: Back Extension (새 세그먼트 + 기존 트랙의 꼬리)
-            // ---------------------------------------------------
-            Point6D pred_b = track->predicted_back;
-            Point6D trk_dir_b; // 트랙 꼬리 방향 (역방향임에 주의)
-            trk_dir_b.dx = track->state_back.at<float>(3);
-            trk_dir_b.dy = track->state_back.at<float>(4);
-            trk_dir_b.dz = track->state_back.at<float>(5);
+                // --- Back Check ---
+                Point6D trk_dir_b;
+                trk_dir_b.dx = track->state_back.at<float>(3);
+                trk_dir_b.dy = track->state_back.at<float>(4);
 
-            double d_b_normal = LaneUtils::GetDistance(pred_b, seg_end);
-            
-            // B-2. 역방향 연결 (Seg Start가 Track Tail과 만남) -> 세그먼트가 뒤집힘
-            double d_b_reverse = LaneUtils::GetDistance(pred_b, seg_start);
+                double d_b_normal = LaneUtils::GetDistance(track->predicted_back, seg_end);
+                double d_b_reverse = LaneUtils::GetDistance(track->predicted_back, seg_start);
 
-            double d_back = d_b_normal;
-            bool rev_back = false;
-            if (d_b_reverse < d_b_normal) { d_back = d_b_reverse; rev_back = true; }
+                bool is_back_reverse = (d_b_reverse < d_b_normal);
+                double d_back = is_back_reverse ? d_b_reverse : d_b_normal;
 
-            // 각도 검사 (Back)
-            Point6D check_dir_b = rev_back ? seg_dir : Point6D{-seg_dir.dx, -seg_dir.dy, -seg_dir.dz, 0,0,0};
-            
-            if (getAngleDiff(trk_dir_b, check_dir_b) <= config_.match_angle_threshold) {
-                if (d_back < config_.match_distance_threshold && d_back < min_dist) {
-                    min_dist = d_back;
-                    best_track_idx = i;
-                    match_type = 2; // Back Match
-                    should_reverse_segment = rev_back;
+                Point6D check_b = is_back_reverse ? seg_dir : seg_dir_inv;
+
+                if (getAngleDiff(trk_dir_b, check_b) <= config_.match_angle_threshold) {
+                    if (d_back < config_.match_distance_threshold && d_back < min_dist) {
+                        min_dist = d_back;
+                        best_track_idx = i;
+                        match_type = 2;
+                        should_reverse_segment = is_back_reverse;
+                    }
                 }
             }
         }
