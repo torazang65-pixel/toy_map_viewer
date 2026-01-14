@@ -5,8 +5,8 @@
 #include <memory> // for std::unique_ptr
 #include "real_time_map/VoxelBuilder.h"
 #include "real_time_map/RansacLaneGenerator.h"
-#include "real_time_map/LaneTracker.h"
 #include "real_time_map/GreedyLaneGenerator.h"
+#include "real_time_map/LaneClusterer.h"
 
 class LineMapProcessor {
 public:
@@ -28,8 +28,8 @@ private:
     // 모듈
     std::unique_ptr<VoxelBuilder> voxel_builder_;
     std::unique_ptr<RansacLaneGenerator> ransac_lane_generator_;
-    std::unique_ptr<LaneTracker> lane_tracker_;
     std::unique_ptr<GreedyLaneGenerator> greedy_lane_generator_;
+    std::unique_ptr<LaneClusterer> lane_clusterer_;
     // std::unique_ptr<LaneGenerator> lane_generator_; // 추후 추가 예정
 
     // 파라미터 및 경로

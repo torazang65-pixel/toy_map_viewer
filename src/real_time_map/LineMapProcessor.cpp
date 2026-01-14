@@ -38,17 +38,16 @@ void LineMapProcessor::loadParameters() {
     nh_.param<float>("greedy_alpha", greedy_config.alpha, 0.7f);
     nh_.param<float>("greedy_beta", greedy_config.beta, 0.9f);
 
-    // LaneTracker 파라미터
-    LaneTracker::Config tracker_config;
-    nh_.param<double>("kf_match_dist", tracker_config.match_distance_threshold, 1.5);
-    nh_.param<double>("kf_match_angle", tracker_config.match_angle_threshold, 20.0);
-    nh_.param<double>("kf_process_noise", tracker_config.process_noise, 0.01);
-    nh_.param<double>("kf_measure_noise", tracker_config.measurement_noise, 0.1);
+    // LaneClusterer 파라미터
+    LaneClusterer::Config clusterer_config;
+    nh_.param<double>("merge_search_radius", clusterer_config.merge_angle_threshold, 2.5);
+    nh_.param<double>("merge_angle_threshold", clusterer_config.merge_search_radius, 30.0);
+    nh_.param<double>("point_connection_radius", clusterer_config.point_connection_radius, 0.8);
 
     voxel_builder_ = std::make_unique<VoxelBuilder>(voxel_size, yaw_voxel_num);
     ransac_lane_generator_ = std::make_unique<RansacLaneGenerator>(ransac_config);
     greedy_lane_generator_ = std::make_unique<GreedyLaneGenerator>(greedy_config);
-    lane_tracker_ = std::make_unique<LaneTracker>(tracker_config);
+    lane_clusterer_ = std::make_unique<LaneClusterer>(clusterer_config);
 
     // 경로 설정
     std::string pkg_path = ros::package::getPath("toy_map_viewer");
@@ -150,10 +149,13 @@ void LineMapProcessor::processBatch(int batch_index) {
 
         saveToBin(lane_path, lanes);
 
-        std::map<int, Lane> merged_lanes = lane_tracker_->process(lanes);
-        ROS_INFO("Batch %d: KF Merged into %lu lanes.", batch_index, merged_lanes.size());
+        std::vector<Lane> clustered_lanes_vec = lane_clusterer_->clusterAndSort(lanes);
+        std::map<int, Lane> merged_lanes;
+        for (const auto& lane : clustered_lanes_vec) {
+            merged_lanes[lane.id] = lane;
+        }
+        ROS_INFO("Batch %d: Clustered & Sorted into %lu lanes.", batch_index, merged_lanes.size());
         saveToBin(merged_lane_path, merged_lanes);
-
     }
 
     // 4. Save Result (현재는 Voxel만 저장)
