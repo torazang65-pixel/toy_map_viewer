@@ -159,7 +159,6 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
         all_points.insert(all_points.end(), forward_pts.begin(), forward_pts.end());
 
         // 위치 기반 정렬
-        current_lane.points = all_points;
         if (current_lane.points.size() >= 2) {
             Lane current_lane;
             current_lane.id = lane_id_counter++;
