@@ -12,8 +12,8 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
-// [핵심] 분리한 헤더 파일 포함
 #include "viewer/PointCloudLayer.h"
+#include "viewer/LaneLayer.h"
 
 #include <fstream>
 #include <vector>
@@ -74,6 +74,8 @@ public:
         // (2) Voxel Layer (Filtered Point Cloud)
         layers_.push_back(std::make_shared<PointCloudLayer>(
             "Show Voxel (Filtered)", nh, "/voxel_animation", "voxel", "voxel", true, false));
+
+        layers_.push_back(std::make_shared<LaneLayer>("Show Generated Lane", nh, "/lane_animation", "lanes", "lane"));
 
         // (추후 확장) Lane Layer 예시
         // layers_.push_back(std::make_shared<LaneLayer>("Show Lane", nh, ...));

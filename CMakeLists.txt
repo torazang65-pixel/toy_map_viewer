@@ -32,6 +32,7 @@ add_definitions(${PCL_DEFINITIONS})
 add_executable(bin_map_viewer
   src/bin_map_viewer.cpp
   src/viewer/PointCloudLayer.cpp
+  src/viewer/LaneLayer.cpp
 )
 
 add_executable(unified_converter_node

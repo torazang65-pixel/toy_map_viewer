@@ -72,6 +72,7 @@ std::map<int, Lane> RansacLaneGenerator::generate(const std::vector<VoxelPoint>&
 
                 // Yaw 차이 계산 (각도 정규화 고려)
                 float diff = std::abs(nodes[ni].point.yaw - seed_yaw);
+                // yaw 정규화가 깔끔하지 않을 수 있음
                 while(diff > M_PI) diff -= 2 * M_PI;
                 if (std::abs(diff) > rad_threshold) continue;
 
