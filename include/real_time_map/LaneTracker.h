@@ -10,39 +10,44 @@
 class LaneTracker {
 public:
     struct Config {
-        double match_distance_threshold = 1.5; // 매칭 허용 거리 (m)
+        double match_distance_threshold = 2.5; // 매칭 허용 거리 (m) - 양방향이므로 조금 더 여유있게
         double match_angle_threshold = 20.0;   // 매칭 허용 각도 (도)
-        double measurement_noise = 0.1;        // R 값 (작을수록 측정값 신뢰)
-        double process_noise = 0.01;           // Q 값 (작을수록 예측값/관성 신뢰)
+        double measurement_noise = 0.1;
+        double process_noise = 0.01;
     };
 
     LaneTracker(const Config& config);
     ~LaneTracker() = default;
 
-    // RANSAC에서 나온 Lane들을 입력받아 KF로 병합된 Lane들을 반환
     std::map<int, Lane> process(const std::map<int, Lane>& detected_lanes);
 
 private:
     struct Track {
         int id;
-        Lane lane; // 현재까지 누적된 Lane 데이터
+        Lane lane; // 누적된 차선 데이터
         
-        cv::KalmanFilter kf;
-        cv::Mat state; // [x, y, z, dx, dy, dz]
-        cv::Mat meas;  // [x, y, z, dx, dy, dz]
+        // --- 양방향 확장을 위한 두 개의 KF ---
         
-        Point6D predicted_head; // KF가 예측한 다음 위치
+        // 1. Front Tracker (정방향 확장용)
+        cv::KalmanFilter kf_front;
+        cv::Mat state_front;
+        Point6D predicted_front; // 다음 예상 위치 (앞쪽)
+
+        // 2. Back Tracker (역방향 확장용)
+        cv::KalmanFilter kf_back;
+        cv::Mat state_back;
+        Point6D predicted_back;  // 다음 예상 위치 (뒤쪽)
     };
 
-    // 내부 유틸리티 함수
-    void initializeKF(Track& track, const Point6D& start_pt, const Point6D& dir);
-    Point6D predictKF(Track& track);
-    void updateKF(Track& track, const Point6D& measurement_pt, const Point6D& measurement_dir);
+    // KF 초기화 (Front는 끝점에서 시작, Back은 시작점에서 시작)
+    void initializeTrack(Track& track, const Lane& segment);
     
-    // 두 벡터 사이의 각도 차이 계산 (도 단위)
+    // 예측 및 업데이트
+    Point6D predictKF(cv::KalmanFilter& kf);
+    void updateKF(cv::KalmanFilter& kf, const Point6D& meas_pt, const Point6D& meas_dir);
+    
+    // 유틸리티
     double getAngleDiff(const Point6D& dir1, const Point6D& dir2);
-    
-    // 배치의 중심점 계산 (Center-Out 전략용)
     Point6D calculateBatchCenter(const std::vector<Lane>& lanes);
 
     Config config_;
