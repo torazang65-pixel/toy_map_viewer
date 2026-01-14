@@ -21,7 +21,7 @@ vehicle_frame: "pcra"
 
 # 실시간 데이터 처리
 batch_size: 20
-overlap_size: 5
+overlap_size: 10
 line_map_output_folder: "data/issue/converted_bin/"
 converted_folder: "data/issue/converted_bin/"
 voxel_size: 0.5

@@ -59,6 +59,21 @@ void LaneLayer::loadData(const std::string& base_dir, double off_x, double off_y
         if (!fileExists(path)) break;
 
         visualization_msgs::MarkerArray marker_array;
+        visualization_msgs::Marker delete_marker;
+        delete_marker.header.frame_id = "map";
+        delete_marker.action = visualization_msgs::Marker::DELETEALL;
+        delete_marker.ns = "generated_lanes";
+
+        delete_marker.id = 0;
+        delete_marker.type = visualization_msgs::Marker::CUBE;
+        delete_marker.pose.orientation.w = 1.0;
+        delete_marker.scale.x = 0.1;
+        delete_marker.scale.y = 0.1;
+        delete_marker.scale.z = 0.1;
+        delete_marker.color.a = 1;
+
+        marker_array.markers.push_back(delete_marker);
+
         std::ifstream ifs(path, std::ios::binary);
         
         if (ifs.is_open()) {
@@ -79,12 +94,14 @@ void LaneLayer::loadData(const std::string& base_dir, double off_x, double off_y
                 visualization_msgs::Marker marker;
                 marker.header.frame_id = "map"; // map 좌표계 기준
                 marker.ns = "generated_lanes";
-                marker.id = id + (idx * 10000); // 프레임별 ID 충돌 방지용 오프셋
+
+                marker.id = id;
                 marker.type = visualization_msgs::Marker::LINE_STRIP;
                 marker.action = visualization_msgs::Marker::ADD;
                 marker.pose.orientation.w = 1.0;
                 marker.scale.x = 0.2; // 선 두께
                 marker.color = generateColor(id);
+                marker.lifetime = ros::Duration(0);
 
                 for (uint32_t j = 0; j < p_num; ++j) {
                     float x, y, z;
@@ -93,7 +110,6 @@ void LaneLayer::loadData(const std::string& base_dir, double off_x, double off_y
                     ifs.read(reinterpret_cast<char*>(&z), 4);
 
                     geometry_msgs::Point p;
-                    // 글로벌 좌표계 오프셋 적용
                     p.x = x - off_x; 
                     p.y = y - off_y; 
                     p.z = z - off_z;
@@ -128,6 +144,7 @@ void LaneLayer::publishEmpty() {
     visualization_msgs::MarkerArray empty;
     visualization_msgs::Marker delete_all;
     delete_all.action = visualization_msgs::Marker::DELETEALL;
+    delete_all.ns = "generated_lanes";
     empty.markers.push_back(delete_all);
     pub_.publish(empty);
 }
