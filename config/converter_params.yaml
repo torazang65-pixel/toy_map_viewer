@@ -26,3 +26,8 @@ line_map_output_folder: "data/issue/converted_bin/"
 converted_folder: "data/issue/converted_bin/"
 voxel_size: 0.5
 yaw_voxel_num: 36
+
+# ransac
+ransac_search_radius: 2.0
+ransac_yaw_threshold: 10.0
+ransac_min_inliers: 3
