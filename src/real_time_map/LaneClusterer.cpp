@@ -156,56 +156,84 @@ bool LaneClusterer::isConnectable(const Lane& l1, const Lane& l2) {
     const Point6D& s2 = l2.points.front();
     const Point6D& e2 = l2.points.back();
 
-    // 4가지 연결 조합 (Head-Head, Head-Tail, Tail-Head, Tail-Tail)
-    // 중 하나라도 조건 만족하면 연결
+    // [강화된 조건 설정]
+    const double LATERAL_THRESHOLD = 0.6; // 횡방향 오차 허용 범위 (m) - 차선 폭보다 훨씬 작게 설정 (보통 0.5~0.8m 추천)
+    const double HEADING_THRESHOLD = 20.0; // 두 차선 자체의 각도 차이 허용 범위 (도)
+
     auto check = [&](const Point6D& p1, const Point6D& p2, bool is_head1, bool is_head2) {
         double dist = LaneUtils::GetDistance(p1, p2);
         if (dist > config_.merge_search_radius) return false;
 
-        // 방향 벡터 계산 (p1의 나가는 방향 vs p2의 들어오는 방향)
-        // Head면 역방향, Tail이면 정방향 벡터 사용
-
-        // p1의 진행 방향 (나가는 방향)
+        // 1. 방향 벡터 준비
         double dir1_dx = is_head1 ? -p1.dx : p1.dx;
         double dir1_dy = is_head1 ? -p1.dy : p1.dy;
         double dir1_dz = is_head1 ? -p1.dz : p1.dz;
 
-        // p2의 들어오는 방향 (is_head2면 정방향, tail이면 역방향)
         double dir2_dx = is_head2 ? p2.dx : -p2.dx;
         double dir2_dy = is_head2 ? p2.dy : -p2.dy;
         double dir2_dz = is_head2 ? p2.dz : -p2.dz;
 
-        // p1 -> p2 연결 벡터 (정규화)
+        // 2. 연결 벡터 (P1 -> P2)
         double conn_dx = p2.x - p1.x;
         double conn_dy = p2.y - p1.y;
         double conn_dz = p2.z - p1.z;
         double len = std::sqrt(conn_dx*conn_dx + conn_dy*conn_dy + conn_dz*conn_dz);
 
+        // 점이 거의 겹쳐있는 경우 (예외 처리)
         if (len < 1e-6) {
-            // 두 점이 거의 같은 위치 - 방향만 검사
             double dot_dirs = dir1_dx*dir2_dx + dir1_dy*dir2_dy + dir1_dz*dir2_dz;
             double angle_dirs = std::acos(std::clamp(dot_dirs, -1.0, 1.0)) * 180.0 / M_PI;
-            return angle_dirs < config_.merge_angle_threshold;
+            return angle_dirs < HEADING_THRESHOLD;
         }
 
-        conn_dx /= len;
-        conn_dy /= len;
-        conn_dz /= len;
+        // 정규화된 연결 벡터
+        double norm_conn_dx = conn_dx / len;
+        double norm_conn_dy = conn_dy / len;
+        double norm_conn_dz = conn_dz / len;
 
-        // p1의 진행방향과 연결 벡터가 비슷해야 함
-        double dot1 = dir1_dx * conn_dx + dir1_dy * conn_dy + dir1_dz * conn_dz;
+        // -----------------------------------------------------------
+        // [조건 1] 횡방향 거리 (Lateral Distance) 검사 (핵심 추가 사항)
+        // -----------------------------------------------------------
+        // 두 벡터(dir1, conn)의 외적(Cross Product) 크기 = 평행사변형 넓이 = 밑변(1) * 높이(Lateral Dist)
+        // dir1이 단위 벡터이므로, 외적의 크기가 곧 직선 P1->dir1 에서 P2까지의 수직 거리임.
+        
+        // 외적 계산 (Cross Product)
+        double cross_x = dir1_dy * norm_conn_dz - dir1_dz * norm_conn_dy;
+        double cross_y = dir1_dz * norm_conn_dx - dir1_dx * norm_conn_dz;
+        double cross_z = dir1_dx * norm_conn_dy - dir1_dy * norm_conn_dx;
+        double sin_val = std::sqrt(cross_x*cross_x + cross_y*cross_y + cross_z*cross_z);
+        
+        double lateral_dist = len * sin_val; // 빗변(len) * sin(theta) = 높이
+
+        if (lateral_dist > LATERAL_THRESHOLD) return false; // 옆으로 너무 벗어남
+
+        // -----------------------------------------------------------
+        // [조건 2] 두 세그먼트 자체의 상대 각도 (Heading Alignment) 검사
+        // -----------------------------------------------------------
+        // 연결 부위가 자연스러워도(angle1, angle2 통과), 두 차선이 
+        // 꺾여서 만나는(V자 형태) 경우를 방지하려면 두 방향 벡터 자체가 평행해야 함.
+        
+        double dot_dirs = dir1_dx*dir2_dx + dir1_dy*dir2_dy + dir1_dz*dir2_dz;
+        double angle_dirs = std::acos(std::clamp(dot_dirs, -1.0, 1.0)) * 180.0 / M_PI;
+
+        if (angle_dirs > HEADING_THRESHOLD) return false;
+
+        // -----------------------------------------------------------
+        // [조건 3] 기존 연결 각도 검사 (Smooth Connection)
+        // -----------------------------------------------------------
+        double dot1 = dir1_dx * norm_conn_dx + dir1_dy * norm_conn_dy + dir1_dz * norm_conn_dz;
         double angle1 = std::acos(std::clamp(dot1, -1.0, 1.0)) * 180.0 / M_PI;
 
-        // p2의 들어오는 방향과 연결 벡터(역방향)가 비슷해야 함
-        double dot2 = dir2_dx * (-conn_dx) + dir2_dy * (-conn_dy) + dir2_dz * (-conn_dz);
+        double dot2 = dir2_dx * norm_conn_dx + dir2_dy * norm_conn_dy + dir2_dz * norm_conn_dz;
         double angle2 = std::acos(std::clamp(dot2, -1.0, 1.0)) * 180.0 / M_PI;
 
         return angle1 < config_.merge_angle_threshold && angle2 < config_.merge_angle_threshold;
     };
 
-    if (check(e1, s2, false, true)) return true; // Tail -> Head (가장 자연스러운 연결)
+    // 4가지 케이스 체크
+    if (check(e1, s2, false, true)) return true; // Tail -> Head
     if (check(s1, e2, true, false)) return true; // Head -> Tail
-    if (check(e1, e2, false, false)) return true; // Tail -> Tail (방향이 서로 반대인 경우)
+    if (check(e1, e2, false, false)) return true; // Tail -> Tail
     if (check(s1, s2, true, true)) return true;   // Head -> Head
 
     return false;
