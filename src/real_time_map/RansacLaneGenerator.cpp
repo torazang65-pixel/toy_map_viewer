@@ -151,37 +151,48 @@ void RansacLaneGenerator::fitLocalLine(const std::vector<VoxelNode>& candidates,
     Eigen::Vector3f dir(coefficients->values[3], coefficients->values[4], coefficients->values[5]);
     dir.normalize();
 
-    // inlier 점들을 직선에 투영하여 t값(위치) 계산
-    float min_t = std::numeric_limits<float>::max();
-    float max_t = std::numeric_limits<float>::lowest();
-
-    for (int idx : inliers->indices) {
-        Eigen::Vector3f pt(cloud->points[idx].x, cloud->points[idx].y, cloud->points[idx].z);
-        float t = (pt - p0).dot(dir);
-        if (t < min_t) min_t = t;
-        if (t > max_t) max_t = t;
-    }
-
-    // 시작점과 끝점 생성
-    Eigen::Vector3f start_pt = p0 + min_t * dir;
-    Eigen::Vector3f end_pt = p0 + max_t * dir;
-
-    // 시드점의 진행 방향과 매칭 (역방향 방지)
-    // candidates[0]는 보통 시드점과 가까움
     float seed_yaw = candidates[0].point.yaw;
-    float line_yaw = std::atan2(dir.y(), dir.x());
-    
-    // 내적을 통해 방향 확인 (방향이 반대면 스왑)
-    if (std::abs(line_yaw - seed_yaw) > M_PI_2) {
-        std::swap(start_pt, end_pt);
+    float line_yaw = std::atan2(dir.y(), dir.x()); // 벡터 -> yaw 변환
+
+    // 시드점의 진행 방향과 반대라면 벡터 방향을 뒤집음
+    if (std::abs(line_yaw - seed_yaw) > M_PI_2) { // 90도 이상 차이나면 반대 방향
         dir = -dir;
     }
 
-    Point6D p1, p2;
-    p1.x = start_pt.x(); p1.y = start_pt.y(); p1.z = start_pt.z();
-    p2.x = end_pt.x(); p2.y = end_pt.y(); p2.z = end_pt.z();
-    
-    // 단순화: 시작점과 끝점만 저장 (나중에 spline 등으로 보간 가능)
-    out_points.push_back(p1);
-    out_points.push_back(p2);
+    // 3. Inlier 점들을 직선상 거리(t) 기준으로 정렬하기 위한 벡터
+    std::vector<std::pair<float, Point6D>> ordered_points;
+
+    for (int idx : inliers->indices) {
+        pcl::PointXYZ pt_pcl = cloud->points[idx];
+        Eigen::Vector3f pt_vec(pt_pcl.x, pt_pcl.y, pt_pcl.z);
+        
+        // 직선 위의 점으로 투영(Projection)하여 거리 t 계산
+        // P_proj = P0 + t * Dir -> t = (P - P0) dot Dir
+        float t = (pt_vec - p0).dot(dir);
+        
+        Point6D p;
+        // 원래 좌표를 그대로 쓸지, 직선에 투영된 좌표를 쓸지 결정 (보통 투영된 좌표가 깔끔함)
+        // 여기서는 원래 좌표를 사용하되, 필요시 아래 주석 해제하여 투영 좌표 사용 가능
+        // Eigen::Vector3f projected_pt = p0 + t * dir;
+        // p.x = projected_pt.x(); p.y = projected_pt.y(); p.z = projected_pt.z();
+        p.x = pt_pcl.x;
+        p.y = pt_pcl.y;
+        p.z = pt_pcl.z;
+
+        // [핵심] 방향 정보 저장 (직선이므로 모든 점이 동일한 dir을 가짐)
+        p.dx = dir.x();
+        p.dy = dir.y();
+        p.dz = dir.z();
+        
+        ordered_points.push_back({t, p});
+    }
+
+    // 4. 거리 t를 기준으로 오름차순 정렬 (Polyline 순서 보장)
+    std::sort(ordered_points.begin(), ordered_points.end(), 
+        [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    // 5. 결과 저장
+    for (const auto& pair : ordered_points) {
+        out_points.push_back(pair.second);
+    }
 }

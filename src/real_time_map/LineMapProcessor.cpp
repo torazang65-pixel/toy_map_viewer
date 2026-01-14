@@ -24,7 +24,7 @@ void LineMapProcessor::loadParameters() {
     // RansacLaneGenerator 파라미터
     RansacLaneGenerator::Config ransac_config;
     nh_.param<float>("ransac_search_radius", ransac_config.search_radius, 2.0f);
-    nh_.param<float>("ransac_yaw_threshold", ransac_config.yaw_threshold, 30.0f);
+    nh_.param<float>("ransac_yaw_threshold", ransac_config.yaw_threshold, 10.0f);
     nh_.param<int>("ransac_min_inliers", ransac_config.min_inliers, 5);
 
     voxel_builder_ = std::make_unique<VoxelBuilder>(voxel_size, yaw_voxel_num);
