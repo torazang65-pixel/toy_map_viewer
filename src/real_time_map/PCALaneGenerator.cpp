@@ -327,6 +327,33 @@ std::map<int, Lane> PCALaneGenerator::generate(const std::vector<VoxelPoint>& vo
             LaneUtils::ReorderPoints(current_lane); // 최종 정리
 
             lanes[current_lane.id] = current_lane;
+
+            // ========== Sweeping Logic ==========
+            // Mark all points within sweep_radius of any lane point as visited
+            // to prevent creating duplicate segments
+            for (const auto& lane_pt : current_lane.points) {
+                std::vector<int> sweep_indices;
+                std::vector<float> sweep_dists;
+                pcl::PointXYZ sweep_center(lane_pt.x, lane_pt.y, lane_pt.z);
+
+                if (kdtree.radiusSearch(sweep_center, config_.sweep_radius, sweep_indices, sweep_dists) > 0) {
+                    for (int sweep_idx : sweep_indices) {
+                        if (!nodes[sweep_idx].visited) {
+                            // Additional check: verify yaw alignment to avoid sweeping unrelated points
+                            float lane_yaw = std::atan2(lane_pt.dy, lane_pt.dx);
+                            float pt_yaw = nodes[sweep_idx].point.yaw;
+                            float yaw_diff = std::abs(lane_yaw - pt_yaw);
+                            while(yaw_diff > M_PI) yaw_diff -= 2 * M_PI;
+
+                            // Only sweep if yaw is aligned (within threshold)
+                            if (std::abs(yaw_diff) < rad_threshold) {
+                                nodes[sweep_idx].visited = true;
+                            }
+                        }
+                    }
+                }
+            }
+            // ========== Sweeping Logic End ==========
         }
     }
 
