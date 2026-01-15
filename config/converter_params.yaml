@@ -20,17 +20,18 @@ sensor_frame: "pandar64_0"
 vehicle_frame: "pcra"
 
 # 실시간 데이터 처리
-batch_size: 20
-overlap_size: 10
+batch_size: 5
+overlap_size: 0
 line_map_output_folder: "data/issue/converted_bin/"
 converted_folder: "data/issue/converted_bin/"
 voxel_size: 0.5
 yaw_voxel_num: 36
 
-# ransac
+# PCA (중간에 로직을 바꿈)
 ransac_search_radius: 2.0
 ransac_yaw_threshold: 10.0
 ransac_min_inliers: 3
+ransac_min_density: 3
 
 # Lane Generation Method Switch
 use_greedy_generator: false
@@ -43,8 +44,7 @@ greedy_min_density: 5
 greedy_alpha: 0.7
 greedy_beta: 0.9
 
-# KF merge
-kf_match_dist: 2
-kf_match_angle: 20.0
-kf_process_noise: 0.01
-kf_measure_noise: 0.1
+# LaneClusterer Params
+merge_search_radius: 2.5
+merge_angle_threshold: 10.0
+point_connection_radius: 0.8

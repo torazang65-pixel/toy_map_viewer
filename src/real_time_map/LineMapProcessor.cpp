@@ -22,10 +22,11 @@ void LineMapProcessor::loadParameters() {
     nh_.param<int>("yaw_voxel_num", yaw_voxel_num, 36);
 
     // RansacLaneGenerator 파라미터
-    RansacLaneGenerator::Config ransac_config;
+    PCALaneGenerator::Config ransac_config;
     nh_.param<float>("ransac_search_radius", ransac_config.search_radius, 2.0f);
     nh_.param<float>("ransac_yaw_threshold", ransac_config.yaw_threshold, 10.0f);
     nh_.param<int>("ransac_min_inliers", ransac_config.min_inliers, 5);
+    nh_.param<int>("ransac_min_density", ransac_config.min_density, 3);
 
     // GreedyLaneGenerator 파라미터
     nh_.param<bool>("use_greedy_generator", use_greedy_generator_, true); // 기본값 true로 설정하여 테스트
@@ -45,7 +46,7 @@ void LineMapProcessor::loadParameters() {
     nh_.param<double>("point_connection_radius", clusterer_config.point_connection_radius, 0.8);
 
     voxel_builder_ = std::make_unique<VoxelBuilder>(voxel_size, yaw_voxel_num);
-    ransac_lane_generator_ = std::make_unique<RansacLaneGenerator>(ransac_config);
+    ransac_lane_generator_ = std::make_unique<PCALaneGenerator>(ransac_config);
     greedy_lane_generator_ = std::make_unique<GreedyLaneGenerator>(greedy_config);
     lane_clusterer_ = std::make_unique<LaneClusterer>(clusterer_config);
 

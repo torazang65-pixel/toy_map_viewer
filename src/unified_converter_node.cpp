@@ -36,7 +36,6 @@ int main(int argc, char** argv) {
     ROS_INFO("#############################################");
     ROS_INFO("#       All Conversion Tasks Finished       #");
     ROS_INFO("#############################################");
-
     
     // 3. BatchSaver
     {

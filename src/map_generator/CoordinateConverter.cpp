@@ -148,15 +148,23 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
             pt.x = buffer[0]; pt.y = buffer[1]; pt.z = buffer[2];
             float theta = buffer[3];
             // [voxel_builder.cpp 참고] theta 정규화
-            while (theta < 0) theta += 2 * M_PI;
-            while (theta >= M_PI) theta -= M_PI;
             pt.intensity = theta;
             cloud_bin->push_back(pt);
         }
         ifs.close();
         if (!cloud_bin->empty()) {
+            // Extract yaw rotation from transformation matrix
+            Eigen::Matrix3f rotation = T_final.block<3, 3>(0, 0);
+            float yaw_offset = std::atan2(rotation(1, 0), rotation(0, 0));
+
             pcl::PointCloud<pcl::PointXYZI>::Ptr transformed(new pcl::PointCloud<pcl::PointXYZI>);
             pcl::transformPointCloud(*cloud_bin, *transformed, T_final);
+
+            // Apply yaw transformation to theta values
+            for (auto& pt : transformed->points) {
+                pt.intensity = std::fmod(pt.intensity + yaw_offset + M_PI, 2 * M_PI) - M_PI;
+            }
+
             *global_bin_map_ += *transformed;
 
             std::string frame_filename = pred_frames_dir_ + "frame_" + std::to_string(frame_index) + ".bin";

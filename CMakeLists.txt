@@ -46,7 +46,7 @@ add_executable(unified_converter_node
   src/real_time_map/FrameLoader.cpp
   src/real_time_map/BatchSaver.cpp
   src/real_time_map/VoxelBuilder.cpp
-  src/real_time_map/RansacLaneGenerator.cpp
+  src/real_time_map/PCALaneGenerator.cpp
   src/real_time_map/GreedyLaneGenerator.cpp
   src/real_time_map/LaneClusterer.cpp
 )
