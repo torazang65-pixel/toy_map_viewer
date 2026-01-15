@@ -34,9 +34,11 @@ CoordinateConverter::CoordinateConverter()
     // 경로 설정
     std::string pkg_path = ros::package::getPath("toy_map_viewer");
     base_dir_ = pkg_path + "/data/lane_change_data/Raw/" + date + "/";
-    sensor_dir_ = base_dir_ + "pandar64_0/";
+    sensor_dir_ = base_dir_ + "pandar64_1/";
     output_dir_ = pkg_path + "/data/lane_change_data_converted/Raw/" + date + "/"; // 저장 경로 변경
     frame_id_file_ = pkg_path + "/data/lane_change_data/Raw/" + date.c_str() + "/zone_info";
+    bin_dir_ = pkg_path + "/data/model_output/" + date + "/pandar64_1/";
+    frames_dir_ = output_dir_ + "frames/";
 
     std::ifstream zone_ifs(frame_id_file_);
     if (zone_ifs.is_open()) {
@@ -85,10 +87,16 @@ std::string CoordinateConverter::getPcdPath(int frame_index) {
     return sensor_dir_ + "pcd/" + std::to_string(frame_index) + ".pcd";
 }
 
+std::string CoordinateConverter::getBinPath(int frame_index) {
+    return bin_dir_ + std::to_string(frame_index) + ".bin";
+}
+
+
 
 bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
     std::string json_path = getJsonPath(frame_index);
     std::string pcd_path = getPcdPath(frame_index);
+    std::string bin_path = getBinPath(frame_index);
 
     // 1. JSON 로드
     std::ifstream j_file(json_path);
@@ -161,8 +169,8 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
         // 샘플 포인트 로그 (정상 범위인지 확인용)
         Eigen::Vector4f test_pt(0, 0, 0, 1);
         Eigen::Vector4f transformed_pt = T_final * test_pt;
-        // ROS_INFO("Frame %d Target Pos: x=%.2f, y=%.2f, z=%.2f", 
-        //          frame_index, transformed_pt.x(), transformed_pt.y(), transformed_pt.z());
+        ROS_INFO("Frame %d Target Pos: x=%.2f, y=%.2f, z=%.2f", 
+                 frame_index, transformed_pt.x(), transformed_pt.y(), transformed_pt.z());
 
         // 차량의 "하늘 방향(Up-vector)"이 최종 좌표계(Zone)에서 어디를 향하는지 확인
         Eigen::Vector3f vehicle_up(0, 0, 1); // 차량 기준 위쪽
@@ -196,6 +204,32 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
         *global_pcd_map_ += *transformed;
     }
 
+
+    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_bin(new pcl::PointCloud<pcl::PointXYZI>);
+    std::ifstream ifs(bin_path, std::ios::binary);
+    if (ifs.is_open()) {
+        float buffer[4];
+        while (ifs.read(reinterpret_cast<char*>(buffer), sizeof(float) * 4)) {
+            pcl::PointXYZI pt;
+            pt.x = buffer[0]; pt.y = buffer[1]; pt.z = buffer[2];
+            float theta = buffer[3];
+            // theta 정규화
+            while (theta < 0) theta += 2 * M_PI;
+            while (theta >= M_PI) theta -= M_PI;
+            pt.intensity = theta;
+            cloud_bin->push_back(pt);
+        }
+        ifs.close();
+        if (!cloud_bin->empty()) {
+            pcl::PointCloud<pcl::PointXYZI>::Ptr transformed(new pcl::PointCloud<pcl::PointXYZI>);
+            pcl::transformPointCloud(*cloud_bin, *transformed, T_final);
+            *global_bin_map_ += *transformed;
+
+            std::string frame_filename = frames_dir_ + "frame_" + std::to_string(frame_index) + ".bin";
+            saveLidarToBin(frame_filename, transformed);
+        }
+    }
+
     return true;
 }
 
@@ -224,8 +258,12 @@ void CoordinateConverter::saveMapToFile(const pcl::PointCloud<pcl::PointXYZI>::P
 
 void CoordinateConverter::saveGlobalMaps() {
     // PCD 결과 저장
-    saveMapToFile(global_pcd_map_, output_dir_ + "lidar_seq_0.bin", true);
+    saveMapToFile(global_pcd_map_, output_dir_ + "lidar_seq_0.bin", false);
     ROS_INFO("Saved PCD Global Map to lidar_seq_0.bin");
+
+    // BIN 결과 저장
+    saveMapToFile(global_bin_map_, output_dir_ + "lidar_seq_1.bin", false);
+    ROS_INFO("Saved BIN Global Map to lidar_seq_1.bin");
 
 }
 

@@ -5,89 +5,87 @@
 #include <pcl/point_types.h>
 #include <fstream>
 #include <vector>
+#include <map> // Publisher를 관리하기 위해 추가
 #include <ros/package.h>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 class MapViewer {
 public:
-    MapViewer() {
-        ros::NodeHandle nh("~");
-        
-        // 1. 파라미터 로드 (실제 bin 파일 경로와 frame_id)
-        nh.param<std::string>("date", date, "2025-09-26-14-21-28_maxen_v6_2");
+    MapViewer() : nh_("~") {
+        // 1. 파라미터 로드
+        nh_.param<std::string>("date", date, "2025-09-26-14-21-28_maxen_v6_2");
         std::string pkg_path = ros::package::getPath("toy_map_viewer");
-        bin_path_ = pkg_path + "/data/lane_change_data_converted/Raw/" + date + "/lidar_seq_0.bin";
-
-
-        frame_id_file_ = pkg_path + "/data/lane_change_data/Raw/" + date.c_str() + "/zone_info";
+        
+        bin_dir_ = pkg_path + "/data/lane_change_data_converted/Raw/" + date + "/";
+        frame_id_file_ = pkg_path + "/data/lane_change_data/Raw/" + date + "/zone_info";
 
         std::ifstream zone_ifs(frame_id_file_);
         if (zone_ifs.is_open()) {
-            zone_ifs >> map_frame_; // 파일의 첫 단어(frame_id)를 읽음
+            zone_ifs >> map_frame_;
             ROS_INFO(">>> [%s] Detected frame_id: %s", date.c_str(), map_frame_.c_str());
             zone_ifs.close();
         } else {
-            ROS_WARN(">>> [%s] zone_info not found at %s.", 
-                    date.c_str(), frame_id_file_.c_str());
+            ROS_WARN(">>> [%s] zone_info not found. Defaulting to 'map'", date.c_str());
+            map_frame_ = "map";
         }
 
-        pub_map_ = nh.advertise<sensor_msgs::PointCloud2>("/global_map", 1, true);
-
-        if (!bin_path_.empty()) {
-            publishMap();
-        } else {
-            ROS_ERROR("Bin path is empty!");
-        }
+        // 2. 디렉토리 내의 모든 bin 파일 처리
+        loadAndPublishFiles();
     }
 
-    void publishMap() {
-        std::ifstream input(bin_path_, std::ios::binary);
-        if (!input.good()) {
-            ROS_ERROR("Could not open file: %s", bin_path_.c_str());
+private:
+    void loadAndPublishFiles() {
+        if (!fs::exists(bin_dir_)) {
+            ROS_ERROR("Directory not found: %s", bin_dir_.c_str());
             return;
         }
 
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
+        for (const auto& entry : fs::directory_iterator(bin_dir_)) {
+            if (entry.path().extension() == ".bin" && entry.path().stem().string().find("lidar_seq") != std::string::npos) {
+                std::string file_stem = entry.path().stem().string(); // 예: lidar_seq_0
+                std::string topic_name = "/global_map/" + file_stem;  // 예: /global_map/lidar_seq_0
 
-        int count = 0;
-        
-        // 2. Bin 파일 읽기 (4개 float이 한 점: x, y, z, intensity)
-        while (input.good() && !input.eof()) {
-            float data[4];
-            input.read(reinterpret_cast<char*>(&data), sizeof(float) * 4);
-            
-            if (input.gcount() == sizeof(float) * 4) {
-                pcl::PointXYZI pt;
-                pt.x = data[0];
-                pt.y = data[1];
-                pt.z = data[2];
-                pt.intensity = data[3];
-                cloud->push_back(pt);
-
-                if (count < 5) { // 첫 5개의 점 좌표 확인
-                    ROS_INFO("Point %d: %f, %f, %f", count, pt.x, pt.y, pt.z);
-                    count++;
+                // 3. 파일별 전용 Publisher 생성 (없을 경우에만 advertise)
+                if (file_pubs_.find(topic_name) == file_pubs_.end()) {
+                    file_pubs_[topic_name] = nh_.advertise<sensor_msgs::PointCloud2>(topic_name, 1, true);
                 }
-            } 
-        }
 
+                publishSingleFile(entry.path().string(), topic_name);
+            }
+        }
+    }
+
+    void publishSingleFile(const std::string& file_path, const std::string& topic_name) {
+        std::ifstream input(file_path, std::ios::binary);
+        if (!input.is_open()) return;
+
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
+        float data[4];
+        while (input.read(reinterpret_cast<char*>(data), sizeof(float) * 4)) {
+            pcl::PointXYZI pt;
+            pt.x = data[0]; pt.y = data[1]; pt.z = data[2]; pt.intensity = data[3];
+            cloud->push_back(pt);
+        }
         input.close();
 
-        // 3. ROS 메시지로 변환
+        if (cloud->empty()) return;
+
         sensor_msgs::PointCloud2 output;
         pcl::toROSMsg(*cloud, output);
         output.header.frame_id = map_frame_;
         output.header.stamp = ros::Time::now();
 
-        pub_map_.publish(output);
-        ROS_INFO("Published %lu points from %s to frame %s", cloud->size(), bin_path_.c_str(), map_frame_.c_str());
+        // 4. 해당 토픽으로 발행
+        file_pubs_[topic_name].publish(output);
+        ROS_INFO("Published %lu points to %s", cloud->size(), topic_name.c_str());
     }
 
-private:
-    ros::Publisher pub_map_;
-    std::string date;
-    std::string bin_path_;
-    std::string frame_id_file_;
-    std::string map_frame_;
+    ros::NodeHandle nh_;
+    std::string date, bin_dir_, frame_id_file_, map_frame_;
+    // 토픽명을 키로 사용하는 Publisher 맵
+    std::map<std::string, ros::Publisher> file_pubs_;
 };
 
 int main(int argc, char** argv) {

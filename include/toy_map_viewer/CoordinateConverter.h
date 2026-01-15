@@ -35,7 +35,7 @@ private:
     // 유틸리티: JSON 및 PCD 경로 생성
     std::string getJsonPath(int frame_index);
     std::string getPcdPath(int frame_index);
-    std::string getBinPath(int sensor_id, int frame_index);
+    std::string getBinPath(int frame_index);
 
 private:
     ros::NodeHandle nh_;
@@ -65,8 +65,8 @@ private:
     std::string base_dir_;
     std::string sensor_dir_;
     std::string output_dir_;
-    std::string pred_frames_dir_;
-    std::string pred_folder_;
+    std::string bin_dir_;
+    std::string frames_dir_;
     int sensor_id_;
     bool is_first_frame_;
 };

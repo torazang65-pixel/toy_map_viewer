@@ -44,7 +44,7 @@ inline void saveToBin(const std::string& filename, const std::map<int, Lane>& ma
     std::cout << ">>> 저장 완료: " << filename << std::endl;
 }
 
-// [수정됨] Lidar 데이터 저장: x, y, z만 깔끔하게 저장
+// [수정됨] Lidar 데이터 저장
 inline void saveLidarToBin(const std::string& filename, const pcl::PointCloud<pcl::PointXYZI>::Ptr& cloud) {
     std::ofstream out(filename, std::ios::binary);
     if (!out.is_open()) {
