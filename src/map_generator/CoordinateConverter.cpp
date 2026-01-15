@@ -172,6 +172,28 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
         }
     }
 
+    // 4. Store transformed vehicle position (vehicle origin in target frame)
+    // The vehicle position in its own frame is at origin (0, 0, 0)
+    Eigen::Vector4f vehicle_pos_in_vehicle_frame(0.0f, 0.0f, 0.0f, 1.0f);
+    Eigen::Vector4f vehicle_pos_in_target_frame = T_final * vehicle_pos_in_vehicle_frame;
+
+    // Transform the vehicle orientation (quaternion from JSON) to target frame
+    // The quaternion in JSON represents vehicle orientation, combine it with transformation
+    Eigen::Quaternionf q_transformed(T_final.block<3, 3>(0, 0));
+
+    // Convert quaternion to roll, pitch, yaw
+    Eigen::Vector3f euler = q_transformed.toRotationMatrix().eulerAngles(0, 1, 2); // roll, pitch, yaw
+
+    Point6D vehicle_pose;
+    vehicle_pose.x = vehicle_pos_in_target_frame(0);
+    vehicle_pose.y = vehicle_pos_in_target_frame(1);
+    vehicle_pose.z = vehicle_pos_in_target_frame(2);
+    vehicle_pose.dx = euler(0);  // roll
+    vehicle_pose.dy = euler(1);  // pitch
+    vehicle_pose.dz = euler(2);  // yaw
+
+    vehicle_trajectory_.push_back(vehicle_pose);
+
     return true;
 }
 
@@ -187,6 +209,26 @@ void CoordinateConverter::saveMapToFile(const pcl::PointCloud<pcl::PointXYZI>::P
     saveLidarToBin(filename, map);// BinSaver 활용
 }
 
+void CoordinateConverter::saveVehicleTrajectory() {
+    if (vehicle_trajectory_.empty()) {
+        ROS_WARN("No vehicle trajectory to save");
+        return;
+    }
+
+    // Treat vehicle trajectory as a "lane" to reuse saveToBin function
+    std::map<int, Lane> trajectory_map;
+    Lane trajectory_lane;
+    trajectory_lane.id = 9999;  // Special ID for vehicle trajectory
+    trajectory_lane.explicit_lane = true;  // Make it visible
+    trajectory_lane.points = vehicle_trajectory_;
+
+    trajectory_map[trajectory_lane.id] = trajectory_lane;
+
+    std::string trajectory_filename = output_dir_ + "vehicle_trajectory.bin";
+    saveToBin(trajectory_filename, trajectory_map);
+    ROS_INFO("Saved Vehicle Trajectory to vehicle_trajectory.bin (%lu poses)", vehicle_trajectory_.size());
+}
+
 void CoordinateConverter::saveGlobalMaps() {
     // PCD 결과 저장
     saveMapToFile(global_pcd_map_, output_dir_ + "lidar_seq_0.bin", true);
@@ -195,6 +237,9 @@ void CoordinateConverter::saveGlobalMaps() {
     // BIN 결과 저장
     saveMapToFile(global_bin_map_, output_dir_ + "lidar_seq_1.bin", false);
     ROS_INFO("Saved BIN Global Map to lidar_seq_1.bin");
+
+    // Vehicle trajectory 저장
+    saveVehicleTrajectory();
 }
 
 void CoordinateConverter::run() {

@@ -121,6 +121,7 @@ public:
         
         for(auto& pub : lane_publishers_) pub.shutdown();
         for(auto& pub : lidar_publishers_) pub.shutdown();
+        if(vehicle_trajectory_publisher_) vehicle_trajectory_publisher_.shutdown();
         lane_publishers_.clear();
         lidar_publishers_.clear();
         lane_properties_.clear();
@@ -134,6 +135,7 @@ public:
         // 2. 정적 맵 로드 (여기서 offset_x_, y, z가 설정됨)
         loadAllSequences();
         loadLidarSequences();
+        loadVehicleTrajectory();
 
         // 3. 애니메이션 레이어 데이터 로드 (설정된 오프셋 전달)
         for (auto& layer : layers_) {
@@ -284,8 +286,112 @@ public:
         applyMenuState();
     }
 
+    void processVehicleTrajectory(const std::string& path, ros::Publisher& pub) {
+        std::ifstream ifs(path, std::ios::binary);
+        if (!ifs.is_open()) {
+            ROS_WARN("Vehicle trajectory file not found: %s", path.c_str());
+            return;
+        }
+
+        uint32_t cluster_num = 0;
+        ifs.read(reinterpret_cast<char*>(&cluster_num), 4);
+
+        visualization_msgs::MarkerArray marker_array;
+        std::vector<geometry_msgs::Point> trajectory_points;
+
+        for (uint32_t i = 0; i < cluster_num; ++i) {
+            int32_t id, layer;
+            bool explicit_lane = false;
+            uint32_t point_num;
+
+            ifs.read(reinterpret_cast<char*>(&id), 4);
+            ifs.read(reinterpret_cast<char*>(&layer), 4);
+            ifs.read(reinterpret_cast<char*>(&explicit_lane), sizeof(bool));
+            ifs.read(reinterpret_cast<char*>(&point_num), 4);
+
+            for (uint32_t j = 0; j < point_num; ++j) {
+                float x, y, z;
+                ifs.read(reinterpret_cast<char*>(&x), 4);
+                ifs.read(reinterpret_cast<char*>(&y), 4);
+                ifs.read(reinterpret_cast<char*>(&z), 4);
+
+                if (!is_initialized_) {
+                    offset_x_ = x;
+                    offset_y_ = y;
+                    offset_z_ = z;
+                    is_initialized_ = true;
+                }
+
+                geometry_msgs::Point pt;
+                pt.x = x - offset_x_;
+                pt.y = y - offset_y_;
+                pt.z = z - offset_z_;
+                trajectory_points.push_back(pt);
+
+                // Create sphere marker for each vehicle position
+                visualization_msgs::Marker sphere_marker;
+                sphere_marker.header.frame_id = "map";
+                sphere_marker.header.stamp = ros::Time::now();
+                sphere_marker.ns = "vehicle_positions";
+                sphere_marker.id = j;
+                sphere_marker.type = visualization_msgs::Marker::SPHERE;
+                sphere_marker.action = visualization_msgs::Marker::ADD;
+
+                sphere_marker.pose.position = pt;
+                sphere_marker.pose.orientation.w = 1.0;
+
+                sphere_marker.scale.x = 1.0;
+                sphere_marker.scale.y = 1.0;
+                sphere_marker.scale.z = 1.0;
+
+                sphere_marker.color.r = 1.0;
+                sphere_marker.color.g = 0.0;
+                sphere_marker.color.b = 0.0;
+                sphere_marker.color.a = 0.8;
+
+                marker_array.markers.push_back(sphere_marker);
+            }
+        }
+
+        // Add line strip to connect trajectory points
+        if (trajectory_points.size() > 1) {
+            visualization_msgs::Marker line_marker;
+            line_marker.header.frame_id = "map";
+            line_marker.header.stamp = ros::Time::now();
+            line_marker.ns = "vehicle_trajectory_line";
+            line_marker.id = 0;
+            line_marker.type = visualization_msgs::Marker::LINE_STRIP;
+            line_marker.action = visualization_msgs::Marker::ADD;
+
+            line_marker.pose.orientation.w = 1.0;
+            line_marker.scale.x = 0.3;  // Line width
+
+            line_marker.color.r = 0.0;
+            line_marker.color.g = 1.0;
+            line_marker.color.b = 0.0;
+            line_marker.color.a = 0.8;
+
+            line_marker.points = trajectory_points;
+
+            marker_array.markers.push_back(line_marker);
+        }
+
+        pub.publish(marker_array);
+        ROS_INFO("Loaded vehicle trajectory with %lu poses", trajectory_points.size());
+    }
+
     void loadAllSequences() { int seq_idx = 0; while (true) { std::string filename = "points_seq_" + std::to_string(seq_idx) + ".bin"; std::string full_path = base_dir_ + filename; if (!Utils::fileExists(full_path)) break; std::string topic_name = "/lane_viz/seq_" + std::to_string(seq_idx); ros::Publisher pub = nh_.advertise<visualization_msgs::MarkerArray>(topic_name, 1, true); lane_publishers_.push_back(pub); processFile(full_path, pub, seq_idx); seq_idx++; } server_.applyChanges(); }
     void loadLidarSequences() { int seq_idx = 0; while(true) { std::string filename = "lidar_seq_" + std::to_string(seq_idx) + ".bin"; std::string full_path = base_dir_ + filename; if (!Utils::fileExists(full_path)) break; std::string topic_name = "/lidar_viz/seq_" + std::to_string(seq_idx); ros::Publisher pub = nh_.advertise<sensor_msgs::PointCloud2>(topic_name, 1, true); lidar_publishers_.push_back(pub); processLidarFile(full_path, pub); seq_idx++; } }
+    void loadVehicleTrajectory() {
+        std::string filename = "vehicle_trajectory.bin";
+        std::string full_path = base_dir_ + filename;
+        if (!Utils::fileExists(full_path)) {
+            ROS_INFO("No vehicle trajectory file found");
+            return;
+        }
+        vehicle_trajectory_publisher_ = nh_.advertise<visualization_msgs::MarkerArray>("/vehicle_trajectory_viz", 1, true);
+        processVehicleTrajectory(full_path, vehicle_trajectory_publisher_);
+    }
     void processLidarFile(const std::string& path, ros::Publisher& pub) { 
         std::ifstream ifs(path, std::ios::binary); if (!ifs.is_open()) return;
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>); uint32_t cluster_num = 0; ifs.read(reinterpret_cast<char*>(&cluster_num), sizeof(uint32_t));
@@ -311,6 +417,7 @@ private:
     // Static Data
     std::vector<ros::Publisher> lane_publishers_;
     std::vector<ros::Publisher> lidar_publishers_;
+    ros::Publisher vehicle_trajectory_publisher_;
     std::string default_dir_;
     std::string base_dir_;
     double offset_x_, offset_y_, offset_z_;

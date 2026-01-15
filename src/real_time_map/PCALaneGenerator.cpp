@@ -40,17 +40,20 @@ std::map<int, Lane> PCALaneGenerator::generate(const std::vector<VoxelPoint>& vo
     // ---------------------------------------------------------
     auto expand_lane = [&](int start_node_idx, bool is_forward) -> std::vector<Point6D> {
         std::vector<Point6D> final_projected_points;
-        
+
         // 초기화
-        std::vector<int> current_inliers; 
+        std::vector<int> current_inliers;
         current_inliers.push_back(start_node_idx);
-        
+
+        // [Option 4] 이번 lane에서 새로 방문 처리한 점들 추적
+        std::vector<int> newly_visited_points;
+
         VoxelNode* search_center_node = &nodes[start_node_idx];
-        
+
         // 초기 모델: 2D 평면(z=0) 투영
         Eigen::Vector3f curr_p0(search_center_node->point.x, search_center_node->point.y, 0.0f);
         float yaw = search_center_node->point.yaw;
-        if (!is_forward) yaw += M_PI; 
+        if (!is_forward) yaw += M_PI;
         Eigen::Vector3f curr_dir(std::cos(yaw), std::sin(yaw), 0.0f);
 
         bool model_initialized = false;
@@ -177,6 +180,35 @@ std::map<int, Lane> PCALaneGenerator::generate(const std::vector<VoxelPoint>& vo
                 eigen_vec = (cov_xx > cov_yy) ? Eigen::Vector2f(1.0f, 0.0f) : Eigen::Vector2f(0.0f, 1.0f);
             }
 
+            // ========== Validation: PCA vs Yaw Average ==========
+            // PCA가 실패하는 edge case를 감지하기 위해 실제 yaw 평균과 비교
+            // Yaw는 이미 0~π 사이로 정규화되어 있으므로 추가 변환 불필요
+            // 직선의 방향은 180도 차이가 같은 방향이므로 2*yaw 사용
+            float mean_sin_2yaw = 0.0f;
+            float mean_cos_2yaw = 0.0f;
+            for (int idx : temp_inliers) {
+                float double_yaw = 2.0f * nodes[idx].point.yaw;
+                mean_sin_2yaw += std::sin(double_yaw);
+                mean_cos_2yaw += std::cos(double_yaw);
+            }
+            float avg_double_yaw = std::atan2(mean_sin_2yaw, mean_cos_2yaw);
+            float avg_yaw = avg_double_yaw / 2.0f;
+
+            Eigen::Vector2f yaw_dir(std::cos(avg_yaw), std::sin(avg_yaw));
+
+            // PCA 방향과 Yaw 평균 방향의 일치도 체크 (절댓값 사용: 반대 방향도 같은 직선)
+            float alignment = std::abs(eigen_vec.dot(yaw_dir));
+
+            // 일치도가 낮으면 (30도 이상 차이 = cos(30°) ≈ 0.867) 이 lane 거부
+            if (alignment < 0.867f) {
+                // [Option 4] Lane 거부 - 새로 방문한 점들만 방문 해제
+                for (int idx : newly_visited_points) {
+                    nodes[idx].visited = false;
+                }
+                return {}; // 빈 벡터 반환으로 lane 거부
+            }
+            // ========== Validation 끝 ==========
+
             // 2.3 모델 업데이트
             model_initialized = true;
 
@@ -228,8 +260,13 @@ std::map<int, Lane> PCALaneGenerator::generate(const std::vector<VoxelPoint>& vo
         // 3. 최종 투영 및 저장
         if (current_inliers.size() < 2) return {};
 
-        // Inlier 방문 처리
-        for(int idx : current_inliers) nodes[idx].visited = true;
+        // [Option 4] Inlier 방문 처리 (새로 방문한 점 추적)
+        for(int idx : current_inliers) {
+            if (!nodes[idx].visited) {
+                newly_visited_points.push_back(idx);
+            }
+            nodes[idx].visited = true;
+        }
 
         std::vector<std::pair<float, Point6D>> sorted_pts;
         for (int idx : current_inliers) {
