@@ -5,6 +5,13 @@
 #include <vector>
 #include <limits>
 #include <algorithm>
+#include <numeric>
+#include <set>
+#include <queue>
+
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/kdtree/kdtree_flann.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -19,6 +26,35 @@
 
 namespace 
 {
+    struct Edge {
+        int u, v;
+        double weight;
+        bool operator<(const Edge& other) const {
+            return weight < other.weight;
+        }
+    };
+
+    struct UnionFind {
+        std::vector<int> parent;
+        UnionFind(int n) {
+            parent.resize(n);
+            std::iota(parent.begin(), parent.end(), 0);
+        }
+        int find(int x) {
+            if (parent[x] == x) return x;
+            return parent[x] = find(parent[x]);
+        }
+        bool unite(int x, int y) {
+            int rootX = find(x);
+            int rootY = find(y);
+            if (rootX != rootY) {
+                parent[rootX] = rootY;
+                return true;
+            }
+            return false;
+        }
+    };
+
     double GetDirectionScore(const Point6D& current, const Point6D& next) 
     {
         double vx = next.x - current.x;
@@ -198,5 +234,172 @@ namespace LaneUtils
         double direct_distance = GetDistance(lane.points.front(), lane.points.back());
 
         return direct_distance / total_length;
+    }
+
+    void ReorderPointsImproved(Lane& lane)
+    {
+        if (lane.points.size() < 3) return;
+
+        int N = lane.points.size();
+
+        // 1. KD-Tree 구성
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        cloud->points.reserve(N);
+        for (const auto& pt : lane.points) {
+            cloud->points.emplace_back(pt.x, pt.y, pt.z);
+        }
+        pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+        kdtree.setInputCloud(cloud);
+
+        // 2. K-NN Graph 생성 (Edge List)
+        // K가 너무 작으면 끊어질 수 있고, 너무 크면 멀리 있는 점과 연결됨.
+        // Voxel Grid가 0.5m이므로 K=5~10 정도면 충분히 로컬 연결성 확보 가능.
+        int K = std::min(N - 1, 10); 
+        std::vector<Edge> edges;
+        edges.reserve(N * K);
+
+        for (int i = 0; i < N; ++i) {
+            std::vector<int> idxs;
+            std::vector<float> sq_dists;
+            kdtree.nearestKSearch(cloud->points[i], K + 1, idxs, sq_dists); // +1은 자기 자신 포함
+
+            for (size_t j = 1; j < idxs.size(); ++j) {
+                int neighbor = idxs[j];
+                if (i < neighbor) { // 중복 방지 (무방향 그래프)
+                    edges.push_back({i, neighbor, (double)sq_dists[j]}); // 거리 제곱 그대로 사용 (비교용)
+                }
+            }
+        }
+        
+        // 거리 순 정렬 (Kruskal)
+        std::sort(edges.begin(), edges.end());
+
+        // 3. MST 구성 (Kruskal's Algorithm)
+        UnionFind uf(N);
+        std::vector<std::vector<int>> adj(N);
+        int edges_count = 0;
+
+        for (const auto& edge : edges) {
+            if (uf.unite(edge.u, edge.v)) {
+                adj[edge.u].push_back(edge.v);
+                adj[edge.v].push_back(edge.u);
+                edges_count++;
+            }
+        }
+
+        // 4. 가장 큰 연결 요소(Connected Component) 찾기
+        // (PCALaneGenerator가 끊어진 점들을 만들 수도 있으므로 가장 큰 덩어리만 살림)
+        std::vector<bool> visited(N, false);
+        int max_comp_start_node = -1;
+        int max_comp_size = -1;
+
+        for (int i = 0; i < N; ++i) {
+            if (visited[i]) continue;
+            
+            std::vector<int> component;
+            std::queue<int> q;
+            q.push(i);
+            visited[i] = true;
+            component.push_back(i);
+
+            while(!q.empty()){
+                int u = q.front(); q.pop();
+                for(int v : adj[u]){
+                    if(!visited[v]){
+                        visited[v] = true;
+                        component.push_back(v);
+                        q.push(v);
+                    }
+                }
+            }
+
+            if ((int)component.size() > max_comp_size) {
+                max_comp_size = component.size();
+                max_comp_start_node = i;
+            }
+        }
+
+        if (max_comp_start_node == -1) return; // Should not happen
+
+        // 5. 트리 지름(Diameter)의 양 끝점 찾기 (Two-pass BFS)
+        // BFS Helper
+        auto bfs_farthest = [&](int start_node) -> std::pair<int, std::vector<int>> {
+            std::queue<int> q;
+            q.push(start_node);
+            
+            std::vector<int> dist(N, -1);
+            std::vector<int> parent(N, -1);
+            dist[start_node] = 0;
+
+            int farthest_node = start_node;
+            int max_dist = 0;
+
+            while (!q.empty()) {
+                int u = q.front(); q.pop();
+                if (dist[u] > max_dist) {
+                    max_dist = dist[u];
+                    farthest_node = u;
+                }
+
+                for (int v : adj[u]) {
+                    if (dist[v] == -1) { // 방문 안함 (같은 컴포넌트 내에서만 이동됨)
+                        dist[v] = dist[u] + 1;
+                        parent[v] = u;
+                        q.push(v);
+                    }
+                }
+            }
+            return {farthest_node, parent};
+        };
+
+        // Pass 1: 임의 점 -> 끝점 U
+        auto [u, _] = bfs_farthest(max_comp_start_node);
+        // Pass 2: 끝점 U -> 반대편 끝점 V (Parent 정보 저장)
+        auto [v, parents] = bfs_farthest(u);
+
+        // 6. 경로 역추적 (V -> ... -> U)
+        std::vector<Point6D> ordered_points;
+        int curr = v;
+        while (curr != -1) {
+            ordered_points.push_back(lane.points[curr]);
+            curr = parents[curr];
+        }
+
+        // 7. [중요] 스무딩 (Smoothing) - MST 경로는 지그재그일 수 있음
+        // 3-Point Moving Average를 적용하여 튀는 점 보정
+        if (ordered_points.size() >= 3) {
+            std::vector<Point6D> smoothed = ordered_points;
+            for (size_t i = 1; i < ordered_points.size() - 1; ++i) {
+                smoothed[i].x = (ordered_points[i-1].x + ordered_points[i].x + ordered_points[i+1].x) / 3.0;
+                smoothed[i].y = (ordered_points[i-1].y + ordered_points[i].y + ordered_points[i+1].y) / 3.0;
+                smoothed[i].z = (ordered_points[i-1].z + ordered_points[i].z + ordered_points[i+1].z) / 3.0;
+            }
+            ordered_points = smoothed;
+        }
+
+        // 8. 방향 벡터(dx, dy, dz) 재계산
+        for (size_t i = 0; i < ordered_points.size(); ++i) {
+            Point6D& p = ordered_points[i];
+            double dx, dy, dz;
+
+            if (i < ordered_points.size() - 1) {
+                // Forward difference
+                dx = ordered_points[i+1].x - p.x;
+                dy = ordered_points[i+1].y - p.y;
+                dz = ordered_points[i+1].z - p.z;
+            } else {
+                // Backward difference (last point)
+                dx = p.x - ordered_points[i-1].x;
+                dy = p.y - ordered_points[i-1].y;
+                dz = p.z - ordered_points[i-1].z;
+            }
+            
+            double len = std::sqrt(dx*dx + dy*dy + dz*dz);
+            if (len > 1e-6) {
+                p.dx = dx / len; p.dy = dy / len; p.dz = dz / len;
+            }
+        }
+
+        lane.points = ordered_points;
     }
 }

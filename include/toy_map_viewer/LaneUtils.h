@@ -39,9 +39,17 @@ namespace LaneUtils{
     double CalculateLaneLinearity(const Lane& lane);
 
     /**
-     * @brief reorder Lane base on distance and direction of points
+     * @brief reorder Lane base on distance and direction of points (legacy version)
      */
     void ReorderPoints(Lane& lane);
+
+    /**
+     * @brief Improved reorder Lane using KD-tree and PCA-based endpoint detection
+     * @param lane Lane to reorder
+     * @param smooth Enable smoothing pass (default: true)
+     * @param maxPointDistance Maximum allowed distance between consecutive points (default: 3.0m)
+     */
+    void ReorderPointsImproved(Lane& lane);
     // Can add new functions here about lanes (i.e. distance between lanes, etc.)
     // double CalculateLaneLength(const Lane& lane);
 }
