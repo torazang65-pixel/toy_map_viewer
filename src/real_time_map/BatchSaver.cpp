@@ -1,5 +1,5 @@
 #include "real_time_map/BatchSaver.h"
-#include "toy_map_viewer/BinSaver.h" // LaneSaver namespace가 없다면 전역 함수 saveLidarToBin 사용
+#include "common/BinSaver.h" // LaneSaver namespace가 없다면 전역 함수 saveLidarToBin 사용
 #include <filesystem>
 #include <iostream>
 

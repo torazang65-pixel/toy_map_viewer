@@ -6,7 +6,7 @@
 #include <set>
 #include <cmath>
 #include <algorithm> // std::max, std::min
-#include "toy_map_viewer/DataTypes.h"
+#include "common/DataTypes.h"
 #include "toy_map_viewer/LaneUtils.h" // CalculateLaneLength 사용
 
 namespace LaneCleaner {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <map>
-#include "DataTypes.h"
+#include "common/DataTypes.h"
 #include "LaneUtils.h"
 
 namespace LaneMerger {

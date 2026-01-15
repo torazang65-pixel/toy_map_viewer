@@ -2,6 +2,7 @@
 #include "toy_map_viewer/MapConverter.h"
 #include "toy_map_viewer/CoordinateConverter.h"
 #include "real_time_map/BatchSaver.h"
+#include "real_time_map/LineMapProcessor.h"
 
 int main(int argc, char** argv) {
     // 노드 이름 초기화 (launch 파일에서 name을 덮어씌울 수 있음)
@@ -13,7 +14,7 @@ int main(int argc, char** argv) {
     ROS_INFO("#############################################");
     ROS_INFO("#        Unified Converter Node Start       #");
     ROS_INFO("#############################################");
-
+    
     // 1. MapConverter 실행
     {
         ROS_INFO("[Step 1] Running MapConverter...");
@@ -23,7 +24,7 @@ int main(int argc, char** argv) {
     }
 
     ROS_INFO("---------------------------------------------");
-
+    
     // 2. CoordinateConverter 실행
     {
         ROS_INFO("[Step 2] Running CoordinateConverter...");
@@ -35,9 +36,8 @@ int main(int argc, char** argv) {
     ROS_INFO("#############################################");
     ROS_INFO("#       All Conversion Tasks Finished       #");
     ROS_INFO("#############################################");
-
     
-    // 나중에 LineMapProcessor를 만든 후 실행할 것.
+    // 3. BatchSaver
     {
         ROS_INFO("[Step 3] Running BatchSaver...");
         BatchSaver batch_saver;
@@ -48,6 +48,14 @@ int main(int argc, char** argv) {
 
     
     
+    // 4. LineMapProcessor
+    
+    {
+        ROS_INFO("[Step 4] Running LineMapProcessor...");
+        LineMapProcessor line_map_processor;
+        line_map_processor.run();
+        ROS_INFO("[Step 4] LineMapProcessor Completed");
+    }
 
     return 0;
 }

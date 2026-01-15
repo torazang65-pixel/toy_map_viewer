@@ -18,7 +18,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "toy_map_viewer/DataTypes.h" // Lane, Point6D 정의 포함
+#include "common/DataTypes.h" // Lane, Point6D 정의 포함
 
 class CoordinateConverter {
 public:
@@ -46,8 +46,12 @@ private:
     pcl::PointCloud<pcl::PointXYZI>::Ptr global_pcd_map_;
     pcl::PointCloud<pcl::PointXYZI>::Ptr global_bin_map_;
 
+    // Vehicle trajectory storage (transformed to target frame)
+    std::vector<Point6D> vehicle_trajectory_;
+
     // 저장 로직을 공용으로 쓰기 위한 헬퍼 함수
     void saveMapToFile(const typename pcl::PointCloud<pcl::PointXYZI>::Ptr& map, const std::string& filename, bool filter_mode);
+    void saveVehicleTrajectory();
     
     std::string sensor_frame_id_; // 예: "pandar"
     std::string vehicle_frame_id_; // 예: "pcra"

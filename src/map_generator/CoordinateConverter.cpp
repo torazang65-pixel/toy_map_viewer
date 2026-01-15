@@ -5,7 +5,7 @@
 #include <fstream>
 #include <iostream>
 
-#include "toy_map_viewer/BinSaver.h"
+#include "common/BinSaver.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -148,21 +148,51 @@ bool CoordinateConverter::processFrame(int sensor_id, int frame_index) {
             pt.x = buffer[0]; pt.y = buffer[1]; pt.z = buffer[2];
             float theta = buffer[3];
             // [voxel_builder.cpp 참고] theta 정규화
-            while (theta < 0) theta += 2 * M_PI;
-            while (theta >= M_PI) theta -= M_PI;
             pt.intensity = theta;
             cloud_bin->push_back(pt);
         }
         ifs.close();
         if (!cloud_bin->empty()) {
+            // Extract yaw rotation from transformation matrix
+            Eigen::Matrix3f rotation = T_final.block<3, 3>(0, 0);
+            float yaw_offset = std::atan2(rotation(1, 0), rotation(0, 0));
+
             pcl::PointCloud<pcl::PointXYZI>::Ptr transformed(new pcl::PointCloud<pcl::PointXYZI>);
             pcl::transformPointCloud(*cloud_bin, *transformed, T_final);
+
+            // Apply yaw transformation to theta values
+            for (auto& pt : transformed->points) {
+                pt.intensity = std::fmod(pt.intensity + yaw_offset + M_PI, 2 * M_PI) - M_PI;
+            }
+
             *global_bin_map_ += *transformed;
 
             std::string frame_filename = pred_frames_dir_ + "frame_" + std::to_string(frame_index) + ".bin";
             saveLidarToBin(frame_filename, transformed);
         }
     }
+
+    // 4. Store transformed vehicle position (vehicle origin in target frame)
+    // The vehicle position in its own frame is at origin (0, 0, 0)
+    Eigen::Vector4f vehicle_pos_in_vehicle_frame(0.0f, 0.0f, 0.0f, 1.0f);
+    Eigen::Vector4f vehicle_pos_in_target_frame = T_final * vehicle_pos_in_vehicle_frame;
+
+    // Transform the vehicle orientation (quaternion from JSON) to target frame
+    // The quaternion in JSON represents vehicle orientation, combine it with transformation
+    Eigen::Quaternionf q_transformed(T_final.block<3, 3>(0, 0));
+
+    // Convert quaternion to roll, pitch, yaw
+    Eigen::Vector3f euler = q_transformed.toRotationMatrix().eulerAngles(0, 1, 2); // roll, pitch, yaw
+
+    Point6D vehicle_pose;
+    vehicle_pose.x = vehicle_pos_in_target_frame(0);
+    vehicle_pose.y = vehicle_pos_in_target_frame(1);
+    vehicle_pose.z = vehicle_pos_in_target_frame(2);
+    vehicle_pose.dx = euler(0);  // roll
+    vehicle_pose.dy = euler(1);  // pitch
+    vehicle_pose.dz = euler(2);  // yaw
+
+    vehicle_trajectory_.push_back(vehicle_pose);
 
     return true;
 }
@@ -179,6 +209,26 @@ void CoordinateConverter::saveMapToFile(const pcl::PointCloud<pcl::PointXYZI>::P
     saveLidarToBin(filename, map);// BinSaver 활용
 }
 
+void CoordinateConverter::saveVehicleTrajectory() {
+    if (vehicle_trajectory_.empty()) {
+        ROS_WARN("No vehicle trajectory to save");
+        return;
+    }
+
+    // Treat vehicle trajectory as a "lane" to reuse saveToBin function
+    std::map<int, Lane> trajectory_map;
+    Lane trajectory_lane;
+    trajectory_lane.id = 9999;  // Special ID for vehicle trajectory
+    trajectory_lane.explicit_lane = true;  // Make it visible
+    trajectory_lane.points = vehicle_trajectory_;
+
+    trajectory_map[trajectory_lane.id] = trajectory_lane;
+
+    std::string trajectory_filename = output_dir_ + "vehicle_trajectory.bin";
+    saveToBin(trajectory_filename, trajectory_map);
+    ROS_INFO("Saved Vehicle Trajectory to vehicle_trajectory.bin (%lu poses)", vehicle_trajectory_.size());
+}
+
 void CoordinateConverter::saveGlobalMaps() {
     // PCD 결과 저장
     saveMapToFile(global_pcd_map_, output_dir_ + "lidar_seq_0.bin", true);
@@ -187,6 +237,9 @@ void CoordinateConverter::saveGlobalMaps() {
     // BIN 결과 저장
     saveMapToFile(global_bin_map_, output_dir_ + "lidar_seq_1.bin", false);
     ROS_INFO("Saved BIN Global Map to lidar_seq_1.bin");
+
+    // Vehicle trajectory 저장
+    saveVehicleTrajectory();
 }
 
 void CoordinateConverter::run() {

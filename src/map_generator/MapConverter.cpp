@@ -1,5 +1,5 @@
 #include "toy_map_viewer/MapConverter.h"
-#include "toy_map_viewer/BinSaver.h"
+#include "common/BinSaver.h"
 #include "toy_map_viewer/LaneCleaner.h"
 #include "toy_map_viewer/LaneMerger.h"
 
