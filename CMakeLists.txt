@@ -53,3 +53,9 @@ target_link_libraries(bin_map_viewer
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
+
+add_executable(map_to_global_viewer_node src/map_to_global_viewer.cpp)
+target_link_libraries(map_to_global_viewer_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+
+add_executable(pointcloud_viewer_node src/pointcloud_viewer.cpp)
+target_link_libraries(pointcloud_viewer_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})

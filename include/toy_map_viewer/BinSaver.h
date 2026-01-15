@@ -24,22 +24,20 @@ inline void saveToBin(const std::string& filename, const std::map<int, Lane>& ma
         
         int32_t id = lane.id;
         int32_t layer = 0;
-        bool explicit_lane = lane.explicit_lane;
         uint32_t p_num = static_cast<uint32_t>(lane.points.size());
 
         out.write(reinterpret_cast<const char*>(&id), sizeof(int32_t));
         out.write(reinterpret_cast<const char*>(&layer), sizeof(int32_t));
-        out.write(reinterpret_cast<const char*>(&explicit_lane), sizeof(bool));
         out.write(reinterpret_cast<const char*>(&p_num), sizeof(uint32_t));
 
         for (const auto& pt : lane.points) {
-            float x = static_cast<float>(pt.x);
-            float y = static_cast<float>(pt.y);
-            float z = static_cast<float>(pt.z);
-            
-            out.write(reinterpret_cast<const char*>(&x), sizeof(float));
-            out.write(reinterpret_cast<const char*>(&y), sizeof(float));
-            out.write(reinterpret_cast<const char*>(&z), sizeof(float));
+            double x = pt.x;
+            double y = pt.y;
+            double z = pt.z;
+
+            out.write(reinterpret_cast<const char*>(&x), sizeof(double));
+            out.write(reinterpret_cast<const char*>(&y), sizeof(double));
+            out.write(reinterpret_cast<const char*>(&z), sizeof(double));
         }
     }
     out.close();

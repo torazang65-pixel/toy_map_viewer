@@ -48,10 +48,18 @@ private:
 
     // 저장 로직을 공용으로 쓰기 위한 헬퍼 함수
     void saveMapToFile(const typename pcl::PointCloud<pcl::PointXYZI>::Ptr& map, const std::string& filename, bool filter_mode);
-    
+    geometry_msgs::Point LLH2ECEF(const geometry_msgs::Point &llh) const;
+
+    static constexpr double CONST_a = 6378137.0;
+    static constexpr double CONST_b = 6356752.314245;
+    static constexpr double CONST_a2 = std::pow(CONST_a,2);
+    static constexpr double CONST_b2 = std::pow(CONST_b,2);
+
     std::string sensor_frame_id_; // 예: "pandar"
     std::string vehicle_frame_id_; // 예: "pcra"
+    std::string frame_id_file_;
     std::string target_frame_id_; // 첫 번째 프레임 (기준 좌표계)
+    std::string date; 
     
     // 파라미터 변수
     std::string base_dir_;

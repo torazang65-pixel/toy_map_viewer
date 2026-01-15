@@ -34,6 +34,7 @@ private:
     std::string input_folder_name_;
     std::string output_folder_name_;
     std::string base_dir_;
+    std::string raw_dir_;
     std::string output_dir_;
 
     // 데이터 저장소

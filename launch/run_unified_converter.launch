@@ -1,19 +1,19 @@
 <launch>
     <arg name="package_name" default="toy_map_viewer" doc="패키지 이름" />
     <arg name="start_idx" default="20000" doc="시작 파일 인덱스" />
-    
-    <arg name="config_file" default="$(find toy_map_viewer)/config/converter_params.yaml" />
 
     <node pkg="rf_tf_broadcaster" type="sensor_tf_broadcaster_node" name="sensor_tf_broadcaster" output="screen">
-        <param name="sensor_id" value="$(arg start_idx)" />
+        <param name="date" value="2025-09-26-14-21-28_maxen_v6_2" />
     </node>
 
     <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen"/>
 
     <node pkg="$(arg package_name)" type="unified_converter_node" name="unified_converter" output="screen">
         
-        <rosparam command="load" file="$(arg config_file)" />
+        <!-- <rosparam command="load" file="$(arg config_file)" /> -->
 
+        <param name="date" value="2025-09-26-14-21-28_maxen_v6_2" />
+        
         <param name="start_index" value="$(arg start_idx)" />
         
     </node>

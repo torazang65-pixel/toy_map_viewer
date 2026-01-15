@@ -1,9 +1,17 @@
 <launch>
-    <arg name="file_idx" default="20000" doc="Target folder index (e.g. 20000)" />
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_world_tf" args="0 0 0 0 0 0 world map" /> -->
 
-    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find toy_map_viewer)/rviz/config.rviz"/>
+  <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen"/>
 
-    <node pkg="toy_map_viewer" type="bin_map_viewer" name="map_viewer" output="screen">
-        <param name="file_idx" value="$(arg file_idx)"/>
-    </node>
+  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find toy_map_viewer)/rviz/config.rviz"/>
+
+  <node name="pointcloud_viewer" pkg="toy_map_viewer" type="pointcloud_viewer_node" output="screen">
+    <param name="date" value="2025-09-26-14-21-28_maxen_v6_2" />
+  </node>
+
+  <node name="map_to_global_viewer" pkg="toy_map_viewer" type="map_to_global_viewer_node" output="screen">
+    <param name="date" value="2025-09-26-14-21-28_maxen_v6_2" />
+  </node>
+  
+  <!-- <node pkg="rosbag" type="play" name="sample_pc" args="-k $(find toy_map_viewer)/bag/sejn0_after.bag"/> -->
 </launch>

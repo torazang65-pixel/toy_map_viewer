@@ -1,6 +1,6 @@
 # 입출력 경로
-input_folder: "data/issue/global_maps/"
-output_folder: "data/issue/converted_bin/"
+input_folder: "map_latest/"
+output_folder: "map_latest/"
 pred_folder: "issue_laneline_pred_nms/"
 
 # 맵 처리 관련 (Crop & Cleaning)
