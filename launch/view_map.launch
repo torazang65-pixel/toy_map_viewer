@@ -13,5 +13,5 @@
     <param name="date" value="2025-09-26-14-21-28_maxen_v6_2" />
   </node>
   
-  <!-- <node pkg="rosbag" type="play" name="sample_pc" args="-k $(find toy_map_viewer)/bag/sejn0_after.bag"/> -->
+  <node pkg="rosbag" type="play" name="sample_pc" args="-k $(find toy_map_viewer)/bag/sejn0_after.bag"/>
 </launch>
