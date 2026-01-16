@@ -23,13 +23,15 @@ void LineMapProcessor::loadParameters() {
     nh_.param<float>("voxel_size", voxel_size, 0.5f);
     nh_.param<int>("yaw_voxel_num", yaw_voxel_num, 36);
 
-    // RansacLaneGenerator 파라미터
-    PCALaneGenerator::Config ransac_config;
-    nh_.param<float>("ransac_search_radius", ransac_config.search_radius, 2.0f);
-    nh_.param<float>("ransac_yaw_threshold", ransac_config.yaw_threshold, 10.0f);
-    nh_.param<int>("ransac_min_inliers", ransac_config.min_inliers, 5);
-    nh_.param<int>("ransac_min_density", ransac_config.min_density, 3);
-    nh_.param<float>("ransac_max_lane_length", ransac_config.max_lane_length, 50.0f);
+    // PCALaneGenerator 파라미터
+    PCALaneGenerator::Config pca_config;
+    nh_.param<float>("pca_search_radius", pca_config.search_radius, 2.0f);
+    nh_.param<float>("pca_yaw_threshold", pca_config.yaw_threshold, 10.0f);
+    nh_.param<float>("pca_distance_threshold", pca_config.distance_threshold, 0.2f);
+    nh_.param<float>("pca_z_tolerance", pca_config.z_tolerance, 1.0f);
+    nh_.param<int>("pca_min_inliers", pca_config.min_inliers, 5);
+    nh_.param<int>("pca_min_density", pca_config.min_density, 3);
+    nh_.param<float>("pca_max_lane_length", pca_config.max_lane_length, 50.0f);
 
     // GreedyLaneGenerator 파라미터
     nh_.param<bool>("use_greedy_generator", use_greedy_generator_, false);
@@ -45,9 +47,11 @@ void LineMapProcessor::loadParameters() {
 
     // LaneClusterer 파라미터
     LaneClusterer::Config clusterer_config;
-    nh_.param<double>("merge_search_radius", clusterer_config.merge_angle_threshold, 2.5);
-    nh_.param<double>("merge_angle_threshold", clusterer_config.merge_search_radius, 30.0);
-    nh_.param<double>("point_connection_radius", clusterer_config.point_connection_radius, 0.8);
+    nh_.param<double>("merge_search_radius", clusterer_config.merge_search_radius, 2.5);
+    nh_.param<double>("merge_angle_threshold", clusterer_config.merge_angle_threshold, 30.0);
+    nh_.param<double>("merge_min_angle_threshold", clusterer_config.merge_min_angle_threshold, 5.0);
+    nh_.param<double>("merge_min_dist_for_angle", clusterer_config.merge_min_dist_for_angle, 0.5);
+    nh_.param<double>("min_lane_length", clusterer_config.min_lane_length, 3.0);
 
     // LanePostProcessor 파라미터 로드
     LanePostProcessor::Config pp_config;
@@ -58,7 +62,7 @@ void LineMapProcessor::loadParameters() {
 
     voxel_builder_ = std::make_unique<VoxelBuilder>(voxel_size, yaw_voxel_num);
     voxel_map_ = std::make_unique<AccumulatedVoxelMap>(voxel_size, yaw_voxel_num);
-    ransac_lane_generator_ = std::make_unique<PCALaneGenerator>(ransac_config);
+    pca_lane_generator_ = std::make_unique<PCALaneGenerator>(pca_config);
     greedy_lane_generator_ = std::make_unique<GreedyLaneGenerator>(greedy_config);
     lane_clusterer_ = std::make_unique<LaneClusterer>(clusterer_config);
     lane_post_processor_ = std::make_unique<LanePostProcessor>(pp_config);
@@ -184,7 +188,7 @@ std::pair<size_t, size_t> LineMapProcessor::processAccumulated(int save_index) {
         if (use_greedy_generator_) {
             lanes = greedy_lane_generator_->generate(voxels);
         } else {
-            lanes = ransac_lane_generator_->generate(voxels);
+            lanes = pca_lane_generator_->generate(voxels);
         }
 
         generated_lanes_count = lanes.size();
@@ -234,7 +238,7 @@ void LineMapProcessor::processBatch(int batch_index) {
             ROS_INFO("Generating lanes using Greedy Algorithm");
             lanes = greedy_lane_generator_->generate(voxels);
         } else {
-            lanes = ransac_lane_generator_->generate(voxels);
+            lanes = pca_lane_generator_->generate(voxels);
         }
 
         // 디버깅 용

@@ -1,6 +1,8 @@
 #include <ros/ros.h>
 #include "toy_map_viewer/MapConverter.h"
+#include "toy_map_viewer/MapConverterV2.h"
 #include "toy_map_viewer/CoordinateConverter.h"
+#include "toy_map_viewer/CoordinateConverterV2.h"
 #include "real_time_map/BatchSaver.h"
 #include "real_time_map/LineMapProcessor.h"
 
@@ -15,21 +17,39 @@ int main(int argc, char** argv) {
     ROS_INFO("#        Unified Converter Node Start       #");
     ROS_INFO("#############################################");
     
-    // 1. MapConverter 실행
+    // 1. MapConverter 실행 (v1/v2 선택)
     {
-        ROS_INFO("[Step 1] Running MapConverter...");
-        MapConverter map_converter;
-        map_converter.run();
+        std::string map_mode;
+        nh.param<std::string>("map_converter_mode", map_mode, "v1");
+
+        if (map_mode == "v2") {
+            ROS_INFO("[Step 1] Running MapConverter (v2)...");
+            MapConverterV2 map_converter;
+            map_converter.run();
+        } else {
+            ROS_INFO("[Step 1] Running MapConverter (v1)...");
+            MapConverter map_converter;
+            map_converter.run();
+        }
         ROS_INFO("[Step 1] MapConverter Completed.");
     }
 
     ROS_INFO("---------------------------------------------");
     
-    // 2. CoordinateConverter 실행
+    // 2. CoordinateConverter 실행 (v1/v2 선택)
     {
-        ROS_INFO("[Step 2] Running CoordinateConverter...");
-        CoordinateConverter coord_converter;
-        coord_converter.run();
+        std::string coord_mode;
+        nh.param<std::string>("coordinate_converter_mode", coord_mode, "v2");
+
+        if (coord_mode == "v1") {
+            ROS_INFO("[Step 2] Running CoordinateConverter (v1)...");
+            CoordinateConverter coord_converter;
+            coord_converter.run();
+        } else {
+            ROS_INFO("[Step 2] Running CoordinateConverter (v2)...");
+            CoordinateConverterV2 coord_converter;
+            coord_converter.run();
+        }
         ROS_INFO("[Step 2] CoordinateConverter Completed.");
     }
 

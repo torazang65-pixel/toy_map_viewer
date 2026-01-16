@@ -45,6 +45,8 @@ add_executable(unified_converter_node
   src/map_generator/LaneCleaner.cpp
   src/map_generator/LaneMerger.cpp
   src/map_generator/CoordinateConverter.cpp
+  src/map_generator/CoordinateConverterV2.cpp
+  src/map_generator/MapConverterV2.cpp
   src/real_time_map/LineMapProcessor.cpp
   src/real_time_map/AccumulatedVoxelMap.cpp
   src/real_time_map/FrameLoader.cpp

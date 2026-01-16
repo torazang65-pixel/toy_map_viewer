@@ -80,10 +80,10 @@ std::map<int, Lane> PCALaneGenerator::generate(const std::vector<VoxelPoint>& vo
                 while(yaw_diff > M_PI) yaw_diff -= 2 * M_PI;
                 if (std::abs(yaw_diff) > rad_threshold) continue;
 
+                float dist_to_line = (pt_2d - curr_p0).cross(curr_dir).norm();
+                if (dist_to_line > config_.distance_threshold) continue;
+
                 if (model_initialized) {
-                    float dist_to_line = (pt_2d - curr_p0).cross(curr_dir).norm();
-                    if (dist_to_line > config_.distance_threshold) continue;
-                    
                     if ((pt_2d - curr_p0).dot(curr_dir) <= 0) continue; 
                 }
 
@@ -208,16 +208,41 @@ std::map<int, Lane> PCALaneGenerator::generate(const std::vector<VoxelPoint>& vo
         for (int idx : current_inliers) {
             Eigen::Vector3f pt_2d(nodes[idx].point.x, nodes[idx].point.y, 0.0f);
             float t = (pt_2d - curr_p0).dot(curr_dir);
-            
+
             Eigen::Vector3f proj_2d = curr_p0 + t * curr_dir;
 
             Point6D p;
             p.x = proj_2d.x();
             p.y = proj_2d.y();
             p.z = nodes[idx].point.z;
-            
-            p.dx = curr_dir.x(); p.dy = curr_dir.y(); p.dz = 0.0;
-            
+
+            // 원래 voxel 방향과 직선 방향을 blend
+            float original_yaw = nodes[idx].point.yaw;
+            Eigen::Vector3f original_dir(std::cos(original_yaw), std::sin(original_yaw), 0.0f);
+
+            // 원래 방향이 직선 방향과 얼마나 일치하는지 계산
+            float alignment = original_dir.dot(curr_dir);
+
+            // 방향이 반대면 뒤집기
+            Eigen::Vector3f aligned_original_dir = original_dir;
+            if (alignment < 0) {
+                aligned_original_dir = -original_dir;
+                alignment = -alignment;
+            }
+
+            // alignment가 높을수록 직선 방향 가중치를 높임 (0.7~0.95 범위로 매핑)
+            // alignment: 1.0 (완전 일치) -> weight = 0.95 (거의 직선)
+            // alignment: 0.0 (수직)     -> weight = 0.7  (원본 방향 더 보존)
+            float line_weight = 0.7f + 0.25f * alignment;
+
+            // 가중 평균으로 방향 보정
+            Eigen::Vector3f blended_dir = line_weight * curr_dir + (1.0f - line_weight) * aligned_original_dir;
+            blended_dir.normalize();
+
+            p.dx = blended_dir.x();
+            p.dy = blended_dir.y();
+            p.dz = 0.0;
+
             sorted_pts.push_back({t, p});
         }
         

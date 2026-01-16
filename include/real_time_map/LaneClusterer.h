@@ -10,14 +10,12 @@
 class LaneClusterer {
 public:
     struct Config {
-        // [Step 1] Segment Clustering 파라미터 (LaneMerger와 유사)
+        // Segment Clustering 파라미터
         double merge_search_radius = 2.5;       // Segment 연결 탐색 반경 (m)
-        double merge_angle_threshold = 30.0;    // 연결 허용 각도 (도)
-        
-        // [Step 2] Geodesic Sort 파라미터
-        double point_connection_radius = 0.8;   // 점 단위 그래프 연결 반경 (m)
-        // 이 반경이 너무 크면 U턴 구간이 가로질러 연결될 수 있고, 너무 작으면 끊어질 수 있음.
-        // voxel_size(0.5)보다 약간 크게 설정 (예: 0.8 ~ 1.0)
+        double merge_angle_threshold = 30.0;    // 연결 허용 각도 (도) - 최대값
+        double merge_min_angle_threshold = 5.0; // 최소 각도 허용 범위 (가까운 거리용, 도)
+        double merge_min_dist_for_angle = 0.5;  // 최소 각도를 적용할 거리 (m)
+        double min_lane_length = 3.0;           // 최소 차선 길이 (m)
     };
 
     LaneClusterer(const Config& config);
@@ -31,33 +29,13 @@ public:
     std::vector<Lane> clusterAndSort(const std::map<int, Lane>& fragment_lanes);
 
 private:
-    // --- 내부 자료구조 ---
-    struct GraphNode {
-        int id;
-        std::vector<std::pair<int, double>> neighbors; // {neighbor_idx, weight(dist)}
-    };
-
-    // --- Helper Functions: Step 1. Clustering ---
+    // --- Helper Functions: Segment Clustering ---
     // 세그먼트 간의 연결 그래프 생성
-    void buildSegmentGraph(const std::vector<Lane*>& lanes, 
+    void buildSegmentGraph(const std::vector<Lane*>& lanes,
                            std::vector<std::vector<int>>& adj_list);
-    
+
     // 두 세그먼트가 연결 가능한지 판단 (거리 & 방향)
     bool isConnectable(const Lane& l1, const Lane& l2);
-
-    // --- Helper Functions: Step 2. Sorting ---
-    // 하나의 Lane 덩어리 내부 점들을 Geodesic Distance 기준으로 정렬
-    void sortPointsGeodesically(Lane& lane);
-
-    // 점들을 그래프로 변환 (KD-Tree 사용)
-    std::vector<GraphNode> buildPointGraph(const std::vector<Point6D>& points);
-
-    // 그래프의 지름(Diameter)을 구성하는 양 끝점 찾기 (Two-pass Dijkstra)
-    // first: start_node_idx, second: end_node_idx
-    std::pair<int, int> findGraphEndpoints(const std::vector<GraphNode>& graph);
-
-    // 특정 시작점으로부터 모든 점까지의 최단 경로(Geodesic Distance) 계산
-    std::vector<double> computeDistances(const std::vector<GraphNode>& graph, int start_node);
 
     Config config_;
     int merged_lane_id_counter_ = 0;

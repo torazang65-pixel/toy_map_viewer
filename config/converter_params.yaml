@@ -1,7 +1,9 @@
 # 입출력 경로
 input_folder: "data/issue/global_maps/"
 output_folder: "data/issue/converted_bin/"
-pred_folder: "issue_laneline_pred_nms/"
+pred_folder: "model_output/" # v1, v2에 따라 변함
+map_converter_mode: "v2"  # v1 or v2
+coordinate_converter_mode: "v2"  # v1 or v2
 
 # 맵 처리 관련 (Crop & Cleaning)
 crop_mode: false
@@ -16,7 +18,7 @@ weight_distance: 1.0           # launch파일의 w_dist 대응
 weight_direction: 5.0          # launch파일의 w_angle 대응
 
 # 좌표계 (Coordinate Converter)
-sensor_frame: "pandar64_0"
+sensor_frame: "pandar64_1" # v1, v2에 따라 변함
 vehicle_frame: "pcra"
 
 # 실시간 데이터 처리
@@ -30,16 +32,18 @@ voxel_size: 0.5
 yaw_voxel_num: 36
 
 # PCA (중간에 로직을 바꿈)
-ransac_search_radius: 1.0
-ransac_yaw_threshold: 10.0
-ransac_min_inliers: 4
-ransac_min_density: 3
-ransac_max_lane_length: 5.0  # 최대 lane segment 길이 (m, 한 방향 확장 거리)
+pca_search_radius: 1.0
+pca_yaw_threshold: 10.0
+pca_distance_threshold: 0.2
+pca_z_tolerance: 1.0
+pca_min_inliers: 5
+pca_min_density: 3
+pca_max_lane_length: 5.0  # 최대 lane segment 길이 (m, 한 방향 확장 거리)
 
 # Lane Generation Method Switch
 use_greedy_generator: false
 # Lane Merger Method Switch
-use_lane_clusterer: false
+use_lane_clusterer: true
 
 # Greedy Polyline Generator Params
 greedy_neighbor_dist: 2.5
@@ -51,12 +55,14 @@ greedy_beta: 0.9
 
 # LaneClusterer Params
 merge_search_radius: 2.5
-merge_angle_threshold: 10.0
-point_connection_radius: 0.8
+merge_angle_threshold: 10.0          # 최대 각도 허용 범위 (멀 때, 도)
+merge_min_angle_threshold: 5.0       # 최소 각도 허용 범위 (가까울 때, 도)
+merge_min_dist_for_angle: 0.5        # 최소 각도를 적용할 거리 (m)
+min_lane_length: 3.0                 # 최소 차선 길이 (m)
 
 # LanePostProcessor Params
-merge_min_dist_th: 1.0
-merge_max_dist_th: 10.0
-merge_min_angle_th: 0.1
-merge_max_angle_th: 0.3
-min_polyline_length: 3.0
+merge_min_dist_th: 1.0      # 1m 이하: 거의 확실한 연결
+merge_max_dist_th: 8.0      # 8m 이하: 병합 가능 (5m segment + gap 고려)
+merge_min_angle_th: 0.2618  # 15도 (가까운 거리에서 허용 각도)
+merge_max_angle_th: 0.5236  # 30도 (먼 거리에서 허용 각도)
+min_polyline_length: 3.0    # 최소 polyline 길이 (m)

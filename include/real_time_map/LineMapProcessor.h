@@ -33,7 +33,7 @@ private:
     std::unique_ptr<VoxelBuilder> voxel_builder_;
     std::unique_ptr<AccumulatedVoxelMap> voxel_map_;
     std::unique_ptr<FrameLoader> frame_loader_;
-    std::unique_ptr<PCALaneGenerator> ransac_lane_generator_;
+    std::unique_ptr<PCALaneGenerator> pca_lane_generator_;
     std::unique_ptr<GreedyLaneGenerator> greedy_lane_generator_;
     std::unique_ptr<LaneClusterer> lane_clusterer_;
     std::unique_ptr<LanePostProcessor> lane_post_processor_;

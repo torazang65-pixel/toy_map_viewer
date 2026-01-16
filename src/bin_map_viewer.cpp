@@ -45,8 +45,7 @@ public:
         // ---------------------------------------------------------
         // 1. 정적 레이어 등록
         // ---------------------------------------------------------
-        lane_static_layer_ = std::make_shared<LaneStaticLayer>(
-            "Static Lane", nh_, server_, menu_handler_);
+        lane_static_layer_ = std::make_shared<LaneStaticLayer>("Static Lane", nh_, server_, menu_handler_);
         static_layers_.push_back(lane_static_layer_);
         static_layers_.push_back(std::make_shared<LidarStaticLayer>("Static Lidar", nh_));
         static_layers_.push_back(std::make_shared<VehicleTrajectoryLayer>("Vehicle Trajectory", nh_));
