@@ -21,7 +21,8 @@ vehicle_frame: "pcra"
 
 # 실시간 데이터 처리
 start_index: 20000
-batch_size: 10
+batch_size: 20
+save_stride: 20
 overlap_size: 0
 line_map_output_folder: "data/issue/converted_bin/"
 converted_folder: "data/issue/converted_bin/"
@@ -29,13 +30,14 @@ voxel_size: 0.5
 yaw_voxel_num: 36
 
 # PCA (중간에 로직을 바꿈)
-ransac_search_radius: 2.0
+ransac_search_radius: 1.0
 ransac_yaw_threshold: 10.0
 ransac_min_inliers: 4
 ransac_min_density: 3
+ransac_max_lane_length: 5.0  # 최대 lane segment 길이 (m, 한 방향 확장 거리)
 
 # Lane Generation Method Switch
-use_greedy_generator: true
+use_greedy_generator: false
 # Lane Merger Method Switch
 use_lane_clusterer: false
 

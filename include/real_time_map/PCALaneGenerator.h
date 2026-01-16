@@ -15,8 +15,8 @@ public:
         int min_inliers = 5;             // 라인으로 인정할 최소 점 개수
         float distance_threshold = 0.2f; // RANSAC 거리 허용 오차 (m)
         int min_density = 5;             // 시드 점 최소 밀도
-        float sweep_radius = 0.8f;       // 이 반경내 모든 점은 이미 사용됨
         float z_tolerance = 1.0f;
+        float max_lane_length = 50.0f;   // 최대 lane 길이 (m) - 한 방향 확장 거리
     };
 
     PCALaneGenerator(const Config& config);

@@ -4,6 +4,8 @@
 #include <string>
 #include <memory> // for std::unique_ptr
 #include "real_time_map/VoxelBuilder.h"
+#include "real_time_map/AccumulatedVoxelMap.h"
+#include "real_time_map/FrameLoader.h"
 #include "real_time_map/PCALaneGenerator.h"
 #include "real_time_map/GreedyLaneGenerator.h"
 #include "real_time_map/LaneClusterer.h"
@@ -19,7 +21,8 @@ public:
 private:
     void loadParameters();
     void processBatch(int batch_index);
-    
+    std::pair<size_t, size_t> processAccumulated(int frame_index);
+
     // 파일 입출력 헬퍼
     pcl::PointCloud<pcl::PointXYZI>::Ptr loadBatchFile(const std::string& path);
 
@@ -28,6 +31,8 @@ private:
     
     // 모듈
     std::unique_ptr<VoxelBuilder> voxel_builder_;
+    std::unique_ptr<AccumulatedVoxelMap> voxel_map_;
+    std::unique_ptr<FrameLoader> frame_loader_;
     std::unique_ptr<PCALaneGenerator> ransac_lane_generator_;
     std::unique_ptr<GreedyLaneGenerator> greedy_lane_generator_;
     std::unique_ptr<LaneClusterer> lane_clusterer_;
@@ -43,4 +48,6 @@ private:
     std::string merged_lane_output_dir_;
     bool use_greedy_generator_;
     bool use_lane_clusterer_;
+    int initial_batch_frames_;
+    int save_stride_;
 };
