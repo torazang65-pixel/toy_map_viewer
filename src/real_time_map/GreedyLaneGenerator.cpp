@@ -252,7 +252,7 @@ std::map<int, Lane> GreedyLaneGenerator::generate(const std::vector<VoxelPoint>&
             lane.valid = true;
             
             // 방향 재정렬 및 정리
-            LaneUtils::ReorderPoints(lane);
+            LaneUtils::ReorderPointsImproved(lane);
             lanes[lane.id] = lane;
         }
     }

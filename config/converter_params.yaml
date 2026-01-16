@@ -34,7 +34,7 @@ ransac_min_inliers: 5
 ransac_min_density: 3
 
 # Lane Generation Method Switch
-use_greedy_generator: false
+use_greedy_generator: true
 
 # Greedy Polyline Generator Params
 greedy_neighbor_dist: 2.5

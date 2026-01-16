@@ -30,6 +30,7 @@ void LineMapProcessor::loadParameters() {
 
     // GreedyLaneGenerator 파라미터
     nh_.param<bool>("use_greedy_generator", use_greedy_generator_, true); // 기본값 true로 설정하여 테스트
+    nh_.param<bool>("use_lane_clusterer", use_lane_clusterer_, false);
 
     GreedyLaneGenerator::Config greedy_config;
     nh_.param<float>("greedy_neighbor_dist", greedy_config.neighbor_dist_thresh, 2.0f);
@@ -45,10 +46,18 @@ void LineMapProcessor::loadParameters() {
     nh_.param<double>("merge_angle_threshold", clusterer_config.merge_search_radius, 30.0);
     nh_.param<double>("point_connection_radius", clusterer_config.point_connection_radius, 0.8);
 
+    // LanePostProcessor 파라미터 로드
+    LanePostProcessor::Config pp_config;
+    nh_.param<float>("merge_min_dist_th", pp_config.merge_min_dist_th, 1.0f);
+    nh_.param<float>("merge_max_dist_th", pp_config.merge_max_dist_th, 10.0f);
+    nh_.param<float>("merge_min_angle_th", pp_config.merge_min_angle_th, 0.1f);
+    nh_.param<float>("merge_max_angle_th", pp_config.merge_max_angle_th, 0.3f);
+
     voxel_builder_ = std::make_unique<VoxelBuilder>(voxel_size, yaw_voxel_num);
     ransac_lane_generator_ = std::make_unique<PCALaneGenerator>(ransac_config);
     greedy_lane_generator_ = std::make_unique<GreedyLaneGenerator>(greedy_config);
     lane_clusterer_ = std::make_unique<LaneClusterer>(clusterer_config);
+    lane_post_processor_ = std::make_unique<LanePostProcessor>(pp_config);
 
     // 경로 설정
     std::string pkg_path = ros::package::getPath("toy_map_viewer");
@@ -150,7 +159,14 @@ void LineMapProcessor::processBatch(int batch_index) {
 
         saveToBin(lane_path, lanes);
 
-        std::vector<Lane> clustered_lanes_vec = lane_clusterer_->clusterAndSort(lanes);
+
+        std::vector<Lane> clustered_lanes_vec;
+        if(use_lane_clusterer_) {
+            clustered_lanes_vec = lane_clusterer_->clusterAndSort(lanes);
+        } else {
+            clustered_lanes_vec = lane_post_processor_->clusterAndSort(lanes);
+        }
+        
         std::map<int, Lane> merged_lanes;
         for (const auto& lane : clustered_lanes_vec) {
             merged_lanes[lane.id] = lane;

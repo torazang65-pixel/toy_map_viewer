@@ -7,6 +7,7 @@
 #include "real_time_map/PCALaneGenerator.h"
 #include "real_time_map/GreedyLaneGenerator.h"
 #include "real_time_map/LaneClusterer.h"
+#include "real_time_map/LanePostProcessor.h"
 
 class LineMapProcessor {
 public:
@@ -30,6 +31,7 @@ private:
     std::unique_ptr<PCALaneGenerator> ransac_lane_generator_;
     std::unique_ptr<GreedyLaneGenerator> greedy_lane_generator_;
     std::unique_ptr<LaneClusterer> lane_clusterer_;
+    std::unique_ptr<LanePostProcessor> lane_post_processor_;
     // std::unique_ptr<LaneGenerator> lane_generator_; // 추후 추가 예정
 
     // 파라미터 및 경로
@@ -40,4 +42,5 @@ private:
     std::string lane_output_dir_;
     std::string merged_lane_output_dir_;
     bool use_greedy_generator_;
+    bool use_lane_clusterer_;
 };
