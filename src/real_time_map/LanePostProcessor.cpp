@@ -40,9 +40,9 @@ std::optional<float> LanePostProcessor::getMergeCost(const Point6D& end1, const 
     if (d < config_.merge_min_dist_th) return 0.0f;
 
     // 각도 임계값 동적 계산
-    float angle_th = (config_.merge_max_dist_th - d) * config_.merge_max_angle_th 
-                   + (d - config_.merge_min_dist_th) * config_.merge_min_angle_th;
-    angle_th /= (config_.merge_max_dist_th - config_.merge_min_dist_th);
+    //float angle_th = (config_.merge_max_dist_th - d) * config_.merge_max_angle_th 
+    //               + (d - config_.merge_min_dist_th) * config_.merge_min_angle_th;
+    float angle_th = config_.merge_max_angle_th;
 
     // 방향 벡터 계산
     Point6D v_conn = directionVector(end1, end2);

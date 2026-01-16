@@ -24,7 +24,7 @@ vehicle_frame: "pcra"
 # 실시간 데이터 처리
 start_index: 20000
 batch_size: 20
-save_stride: 20
+save_stride: 1
 overlap_size: 0
 line_map_output_folder: "data/issue/converted_bin/"
 converted_folder: "data/issue/converted_bin/"
@@ -36,14 +36,14 @@ pca_search_radius: 1.0
 pca_yaw_threshold: 10.0
 pca_distance_threshold: 0.2
 pca_z_tolerance: 1.0
-pca_min_inliers: 5
+pca_min_inliers: 3
 pca_min_density: 3
 pca_max_lane_length: 5.0  # 최대 lane segment 길이 (m, 한 방향 확장 거리)
 
 # Lane Generation Method Switch
 use_greedy_generator: false
 # Lane Merger Method Switch
-use_lane_clusterer: true
+use_lane_clusterer: false
 
 # Greedy Polyline Generator Params
 greedy_neighbor_dist: 2.5
@@ -54,11 +54,11 @@ greedy_alpha: 0.7
 greedy_beta: 0.9
 
 # LaneClusterer Params
-merge_search_radius: 2.5
+merge_search_radius: 3.5
 merge_angle_threshold: 10.0          # 최대 각도 허용 범위 (멀 때, 도)
 merge_min_angle_threshold: 5.0       # 최소 각도 허용 범위 (가까울 때, 도)
 merge_min_dist_for_angle: 0.5        # 최소 각도를 적용할 거리 (m)
-min_lane_length: 3.0                 # 최소 차선 길이 (m)
+min_lane_length: 1.0                 # 최소 차선 길이 (m)
 
 # LanePostProcessor Params
 merge_min_dist_th: 1.0      # 1m 이하: 거의 확실한 연결

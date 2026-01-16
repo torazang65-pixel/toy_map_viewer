@@ -103,7 +103,7 @@ std::map<int, Lane> PCALaneGenerator::generate(const std::vector<VoxelPoint>& vo
                 centroid.y() += nodes[idx].point.y;
             }
             centroid /= static_cast<float>(temp_inliers.size());
-
+            
             float cov_xx = 0.0f, cov_xy = 0.0f, cov_yy = 0.0f;
             for (int idx : temp_inliers) {
                 float dx = nodes[idx].point.x - centroid.x();

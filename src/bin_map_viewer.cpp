@@ -72,7 +72,7 @@ public:
 
         // 4. Subscriber & Timer
         sub_idx_ = nh.subscribe("/change_map_idx", 1, &BinMapViewer::changeIdxCallback, this);
-        play_timer_ = nh.createTimer(ros::Duration(1), &BinMapViewer::playCallback, this);
+        play_timer_ = nh.createTimer(ros::Duration(0.1), &BinMapViewer::playCallback, this);
 
         // 5. 로드
         loadMap(start_file_idx);

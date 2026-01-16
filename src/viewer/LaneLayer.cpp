@@ -100,7 +100,11 @@ void LaneLayer::loadData(const std::string& base_dir, double off_x, double off_y
                 marker.action = visualization_msgs::Marker::ADD;
                 marker.pose.orientation.w = 1.0;
                 marker.scale.x = 0.2; // 선 두께
-                marker.color = generateColor(id);
+                // marker.color = generateColor(id);
+                marker.color.r = 0.0f;
+                marker.color.g = 1.0f;
+                marker.color.b = 1.0f;
+                marker.color.a = 1.0f;
                 marker.lifetime = ros::Duration(0);
 
                 for (uint32_t j = 0; j < p_num; ++j) {
