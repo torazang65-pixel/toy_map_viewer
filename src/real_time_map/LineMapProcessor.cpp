@@ -29,7 +29,7 @@ void LineMapProcessor::loadParameters() {
     nh_.param<int>("ransac_min_density", ransac_config.min_density, 3);
 
     // GreedyLaneGenerator 파라미터
-    nh_.param<bool>("use_greedy_generator", use_greedy_generator_, true); // 기본값 true로 설정하여 테스트
+    nh_.param<bool>("use_greedy_generator", use_greedy_generator_, false);
     nh_.param<bool>("use_lane_clusterer", use_lane_clusterer_, false);
 
     GreedyLaneGenerator::Config greedy_config;

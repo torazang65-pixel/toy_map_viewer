@@ -2,8 +2,7 @@
 #include "toy_map_viewer/LaneUtils.h"
 #include <cmath>
 #include <algorithm>
-#include <iostream>
-#include <set>
+#include <unordered_map>
 
 LanePostProcessor::LanePostProcessor(const Config& config) : config_(config) {}
 
@@ -132,12 +131,13 @@ Lane LanePostProcessor::mergeLanes(const Lane& l1, const Lane& l2, int idx1, int
 
 std::vector<Lane> LanePostProcessor::clusterAndSort(const std::map<int, Lane>& fragment_lanes) {
     std::map<int, Lane> current_lanes = fragment_lanes;
-    
-    // 1. 모든 가능한 병합 후보 계산
-    std::vector<MergeCandidate> candidates;
-    std::vector<int> lane_ids;
-    for(auto const& [id, lane] : current_lanes) lane_ids.push_back(id);
 
+    // 1. 모든 가능한 병합 후보 계산
+    std::vector<int> lane_ids;
+    lane_ids.reserve(current_lanes.size());
+    for (auto const& [id, lane] : current_lanes) lane_ids.push_back(id);
+
+    std::vector<MergeCandidate> candidates;
     for (size_t i = 0; i < lane_ids.size(); ++i) {
         for (size_t j = i + 1; j < lane_ids.size(); ++j) {
             auto cand = checkMerge(current_lanes[lane_ids[i]], current_lanes[lane_ids[j]]);
@@ -146,37 +146,79 @@ std::vector<Lane> LanePostProcessor::clusterAndSort(const std::map<int, Lane>& f
     }
     std::sort(candidates.begin(), candidates.end());
 
-    // 2. Greedy Merge 수행
-    // 이미 병합된 lane id를 추적하기 위한 set 대신, map에서 직접 확인
-    // post_processor.cpp 방식: candidates를 순회하며 유효하면 병합
-    
-    // 주의: 병합으로 인해 Lane ID가 변경되거나 삭제되면, 기존 Candidate의 ID가 무효화됨.
-    // 여기서는 간단하게 Union-Find 자료구조를 쓰거나, 
-    // 매번 가장 좋은 후보를 처리하고 관련된 후보를 무효화하는 방식을 써야 함.
-    // post_processor.cpp는 한번에 후보를 다 구하고, 이미 처리된 ID면 스킵하는 방식 사용.
+    // 2. post_processor 방식: endpoint 1:1 매칭 후 병합
+    using EndPoint = std::pair<int, int>; // (lane_id, point_idx)
+    struct EndPointHash {
+        std::size_t operator()(const EndPoint& p) const {
+            return std::hash<int>()(p.first) ^ (std::hash<int>()(p.second) << 1);
+        }
+    };
 
-    std::set<int> merged_ids; // 병합되어 사라진 ID들
+    std::unordered_map<EndPoint, EndPoint, EndPointHash> merge_pair;
+    merge_pair.reserve(candidates.size() * 2);
 
     for (const auto& cand : candidates) {
-        // 이미 다른 Lane에 병합되어 사라졌으면 스킵
-        if (merged_ids.count(cand.lane_id_1) || merged_ids.count(cand.lane_id_2)) continue;
-        
-        // 실제 병합 수행
-        Lane& l1 = current_lanes[cand.lane_id_1];
-        const Lane& l2 = current_lanes[cand.lane_id_2];
+        EndPoint p1 = {cand.lane_id_1, cand.point_idx_1};
+        EndPoint p2 = {cand.lane_id_2, cand.point_idx_2};
+        if (merge_pair.count(p1) || merge_pair.count(p2)) continue;
+        merge_pair[p1] = p2;
+        merge_pair[p2] = p1;
+    }
 
-        // l1에 l2를 병합
-        l1 = mergeLanes(l1, l2, cand.point_idx_1, cand.point_idx_2);
-        
-        // l2는 삭제 처리
-        merged_ids.insert(cand.lane_id_2);
-        current_lanes.erase(cand.lane_id_2);
+    while (!merge_pair.empty()) {
+        auto it = merge_pair.begin();
+        EndPoint p1 = it->first;
+        EndPoint p2 = it->second;
+        merge_pair.erase(p1);
+        merge_pair.erase(p2);
 
-        // 업데이트된 l1의 양 끝점 인덱스가 변경되었으므로, l1과 관련된 
-        // 이후의 candidates 정보는 사실상 유효하지 않을 수 있음 (좌표가 바뀜).
-        // 하지만 post_processor.cpp 로직 상, 한번 연결하면 끝이라고 가정하고 진행.
-        // 더 정확하게 하려면 l1의 끝점이 바뀌었으므로 새로운 연결 가능성을 찾아야 하지만,
-        // Batch 처리 특성상 1회 패스로도 충분한 경우가 많음.
+        if (p1.first == p2.first) continue;
+
+        int line1_id = p1.first;
+        int line2_id = p2.first;
+        int point1_idx = p1.second;
+        int point2_idx = p2.second;
+
+        if (!current_lanes.count(line1_id) || !current_lanes.count(line2_id)) continue;
+
+        const Lane& line1 = current_lanes[line1_id];
+        const Lane& line2 = current_lanes[line2_id];
+        size_t line1_size = line1.points.size();
+        size_t line2_size = line2.points.size();
+
+        Lane merged = mergeLanes(line1, line2, point1_idx, point2_idx);
+        current_lanes.erase(line2_id);
+        current_lanes[line1_id] = merged;
+
+        EndPoint merged_back_pt = {line1_id, static_cast<int>(merged.points.size() - 1)};
+        EndPoint line1_front_pt = {line1_id, 0};
+        EndPoint line1_back_pt = {line1_id, static_cast<int>(line1_size - 1)};
+        EndPoint line2_front_pt = {line2_id, 0};
+        EndPoint line2_back_pt = {line2_id, static_cast<int>(line2_size - 1)};
+
+        // point1의 다른 merge pt를 위한 처리
+        if (point1_idx == 0) {
+            if (merge_pair.count(line1_back_pt)) {
+                EndPoint target_pt = merge_pair[line1_back_pt];
+                merge_pair[target_pt] = line1_front_pt;
+                merge_pair[line1_front_pt] = target_pt;
+            }
+        }
+
+        // point2의 다른 merge pt를 위한 처리
+        if (point2_idx == 0) {
+            if (merge_pair.count(line2_back_pt)) {
+                EndPoint target_pt = merge_pair[line2_back_pt];
+                merge_pair[target_pt] = merged_back_pt;
+                merge_pair[merged_back_pt] = target_pt;
+            }
+        } else {
+            if (merge_pair.count(line2_front_pt)) {
+                EndPoint target_pt = merge_pair[line2_front_pt];
+                merge_pair[target_pt] = merged_back_pt;
+                merge_pair[merged_back_pt] = target_pt;
+            }
+        }
     }
 
     // 3. 결과 변환 및 Reordering (지그재그 펴기)
