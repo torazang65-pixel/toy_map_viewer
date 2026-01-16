@@ -8,16 +8,23 @@ find_package(PCL REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   roslib # ros::package::getPath 사용을 위해 필요
+  sensor_msgs
   std_msgs
+  geometry_msgs
   interactive_markers
   pcl_ros
   pcl_conversions
   rf_tf_broadcaster
+  linemapdraft_builder
 )
 
 find_package(OpenCV REQUIRED)
 
-catkin_package()
+catkin_package(
+  INCLUDE_DIRS include
+  LIBRARIES ${PROJECT_NAME}
+  CATKIN_DEPENDS roscpp sensor_msgs
+)
 
 include_directories(
   include
@@ -49,6 +56,20 @@ add_executable(unified_converter_node
   src/real_time_map/PCALaneGenerator.cpp
   src/real_time_map/GreedyLaneGenerator.cpp
   src/real_time_map/LaneClusterer.cpp
+)
+
+add_library(${PROJECT_NAME}
+  src/realtime_voxel_manager.cpp
+  src/realtime_line_builder.cpp
+  src/real_time_map/FrameLoader.cpp
+)
+
+# 노드 실행 파일명을 realtime_builder_node로 설정
+add_executable(realtime_builder_node src/realtime_builder_node.cpp)
+target_link_libraries(realtime_builder_node
+  ${PROJECT_NAME}
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
 )
 
 # 라이브러리 링크

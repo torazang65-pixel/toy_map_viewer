@@ -3,16 +3,15 @@
 #include <iostream>
 
 FrameLoader::FrameLoader(const ros::NodeHandle& nh) : nh_(nh) {
-    nh_.param<int>("start_index", sensor_id_, 20000);
-    nh_.param<std::string>("converted_folder", input_folder_, "data/issue/converted_bin/"); 
+    nh_.param<std::string>("date", date, "2025-09-26-14-21-28_maxen_v6_2"); 
 
     std::string pkg_path = ros::package::getPath("toy_map_viewer");
-    base_dir_ = pkg_path + "/";
+    base_dir_ = pkg_path + "/lane_change_data_converted/Raw/"+ date + "/frames/";
 }
 
 std::string FrameLoader::getPredBinPath(int frame_index) {
     // 경로 예: .../data/issue/converted_bin/20000/pred_frames/frame_20000.bin
-    return base_dir_ + input_folder_ + std::to_string(sensor_id_) + "/pred_frames/frame_" + std::to_string(frame_index) + ".bin";
+    return base_dir_ + "frame_" + std::to_string(frame_index) + ".bin";
 }
 
 FrameLoader::CloudT::Ptr FrameLoader::loadFrame(int frame_index) {

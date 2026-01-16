@@ -23,6 +23,7 @@ private:
     ros::NodeHandle nh_;
     
     // 경로 관련 변수
+    std::string date;
     std::string base_dir_; // 패키지 경로
     std::string input_folder_; // "data/issue/converted_bin/"
     int sensor_id_;
