@@ -1,6 +1,8 @@
 #include <toy_map_viewer/realtime_line_builder.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
 #include <toy_map_viewer/polyline_generator.h> 
+#include <toy_map_viewer/polyline_simplifier.h> 
+#include <toy_map_viewer/post_processor.h> 
 #include <visualization_msgs/MarkerArray.h>
 
 namespace toy_map_viewer {
@@ -14,6 +16,7 @@ RealTimeLineBuilder::RealTimeLineBuilder(ros::NodeHandle& nh) {
     voxel_manager_ = std::make_unique<RealTimeVoxelManager>(voxel_size_, yaw_voxel_num_);
     voxel_pub_ = nh.advertise<sensor_msgs::PointCloud2>("active_voxels", 1);
 
+    //polyline generator
     nh.param("neighbor_dist_thresh", neighbor_dist_thresh_, 2.0f);
     nh.param("cylinder_search_width", cylinder_search_width_, 1.0f);
     nh.param("alpha", alpha_, 0.7f);
@@ -22,10 +25,18 @@ RealTimeLineBuilder::RealTimeLineBuilder(ros::NodeHandle& nh) {
 
     polyline_pub_ = nh.advertise<visualization_msgs::MarkerArray>("detected_polylines", 1);
 
+    //polyline simplifier
     nh.param("use_vw", use_vw_, true);
     nh.param("use_rdp", use_rdp_, true);
     nh.param("vw_eps", vw_eps_, 0.5f);  // 면적 임계값
-    nh.param("rdp_eps", rdp_eps_, 0.1f); // 거리 임계값
+    nh.param("rdp_eps", rdp_eps_, 0.5f); // 거리 임계값
+
+    // Post Processor 파라미터 로드
+    nh.param("merge_min_dist_th", merge_min_dist_th_, 1.0f);
+    nh.param("merge_max_dist_th", merge_max_dist_th_, 10.0f);
+    nh.param("merge_min_angle_th", merge_min_angle_th_, 0.1f);
+    nh.param("merge_max_angle_th", merge_max_angle_th_, 0.3f);
+    nh.param("min_polyline_length", min_polyline_length_, 3.0f);
 }
 
 void RealTimeLineBuilder::callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
@@ -125,7 +136,7 @@ void RealTimeLineBuilder::processGeneratorStage(std::vector<ldb::data_types::Poi
         alpha_, beta_, drop_width_
     );
 
-    // 3. [추가] 폴리라인 단순화 적용
+    // 3. 폴리라인 단순화 적용
     namespace lps = ldb::polyline_simplifier;
     for (auto& polyline : polylines) {
         if (polyline.size() <= 2) continue;
@@ -140,7 +151,19 @@ void RealTimeLineBuilder::processGeneratorStage(std::vector<ldb::data_types::Poi
         }
     }
 
-    // 3. 시각화 (MarkerArray 발행)
+    // 4. 포스트 프로세싱 (Post-Processor)
+    namespace lpp = ldb::post_processor;
+    
+    // 끊어진 차선 병합
+    std::vector<std::vector<ldb::data_types::Point>> merged_polylines = lpp::mergeAllPolylines(
+        polylines, merge_min_dist_th_, merge_max_dist_th_, 
+        merge_min_angle_th_, merge_max_angle_th_
+    );
+
+    // 너무 짧은 차선 제거
+    lpp::dropPolylines(merged_polylines, min_polyline_length_);
+
+    // 5. 시각화 (MarkerArray 발행)
     publishPolylines(polylines, frame_id);
 }
 

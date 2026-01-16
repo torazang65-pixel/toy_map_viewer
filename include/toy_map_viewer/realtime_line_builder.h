@@ -46,6 +46,11 @@ private:
     float vw_eps_;
     float rdp_eps_;
 
+    // post processing
+    float merge_min_dist_th_, merge_max_dist_th_;
+    float merge_min_angle_th_, merge_max_angle_th_;
+    float min_polyline_length_;
+
 };
 
 } // namespace toy_map_viewer

@@ -64,6 +64,7 @@ add_library(${PROJECT_NAME}
   src/real_time_map/FrameLoader.cpp
   src/polyline_generator.cpp
   src/polyline_simplifier.cpp
+  src/post_processor.cpp
   src/common/io.cpp               
   src/common/data_types.cpp       
 )
