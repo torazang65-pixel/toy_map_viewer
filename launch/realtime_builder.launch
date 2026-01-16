@@ -2,14 +2,26 @@
 
     <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen"/>
 
+    <node type="rviz" name="rviz" pkg="rviz" args="-d $(find toy_map_viewer)/rviz/config.rviz"/>
 
   <arg name="date" default="2025-09-26-14-21-28_maxen_v6_2" />
   <arg name="start_frame" default="0" />
   <arg name="end_frame" default="299" />
-  <arg name="playback_rate" default="10.0" /> <arg name="voxel_size" default="0.5" />
+  <arg name="playback_rate" default="10.0" /> 
+  <arg name="voxel_size" default="0.5" />
   <arg name="yaw_voxel_num" default="1" />
   <arg name="min_density_threshold" default="5" />
   <arg name="max_voxel_age" default="100" />
+
+  <node name="pointcloud_viewer" pkg="toy_map_viewer" type="pointcloud_viewer_node" output="screen">
+    <param name="date" value="$(arg date)" />
+  </node>
+
+  <node name="map_to_global_viewer" pkg="toy_map_viewer" type="map_to_global_viewer_node" output="screen">
+    <param name="date" value="$(arg date)" />
+  </node>
+  
+  <!-- <node pkg="rosbag" type="play" name="sample_pc" args="-k $(find toy_map_viewer)/bag/kusn95_after.bag"/> -->
 
   <node pkg="toy_map_viewer" type="realtime_builder_node" name="realtime_builder_node" output="screen">
     <param name="date" value="$(arg date)" />

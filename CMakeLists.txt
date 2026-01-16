@@ -62,6 +62,8 @@ add_library(${PROJECT_NAME}
   src/realtime_voxel_manager.cpp
   src/realtime_line_builder.cpp
   src/real_time_map/FrameLoader.cpp
+  src/map_to_global_viewer.cpp
+  src/pointcloud_viewer.cpp
 )
 
 # 노드 실행 파일명을 realtime_builder_node로 설정
