@@ -8,7 +8,6 @@ namespace ldb = linemapdraft_builder;
 RealTimeLineBuilder::RealTimeLineBuilder(ros::NodeHandle& nh) {
     nh.param("voxel_size", voxel_size_, 0.5f);
     nh.param("yaw_voxel_num", yaw_voxel_num_, 1);
-    nh.param("min_density_threshold", min_density_th_, 5);
 
     voxel_manager_ = std::make_unique<RealTimeVoxelManager>(voxel_size_, yaw_voxel_num_);
     voxel_pub_ = nh.advertise<sensor_msgs::PointCloud2>("active_voxels", 1);

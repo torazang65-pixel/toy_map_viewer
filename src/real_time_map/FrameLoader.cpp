@@ -1,12 +1,36 @@
 #include "real_time_map/FrameLoader.h"
 #include <fstream>
 #include <iostream>
+#include <algorithm>
+#include <cctype>
 
 FrameLoader::FrameLoader(const ros::NodeHandle& nh) : nh_(nh) {
     nh_.param<std::string>("date", date, "2025-09-26-14-21-28_maxen_v6_2"); 
 
     std::string pkg_path = ros::package::getPath("toy_map_viewer");
+
+    // 1. 데이터 루트 경로 설정
     base_dir_ = pkg_path + "/lane_change_data_converted/Raw/"+ date + "/frames/";
+    std::string zone_info_path = pkg_path + "/lane_change_data/Raw/"+ date + "/zone_info";
+
+    // 2. frame_id.txt 파일에서 문자열 읽기
+    std::ifstream id_file(zone_info_path);
+    if (id_file.is_open()) {
+        if (std::getline(id_file, frame_id_)) {
+            // 공백 및 줄바꿈 제거 (GYGI24 뒤의 \n 등 제거) [cite: 3]
+            frame_id_.erase(std::remove_if(frame_id_.begin(), frame_id_.end(), 
+                            [](unsigned char x){ return std::isspace(x); }), frame_id_.end());
+            ROS_INFO("Automatic frame_id detected: %s", frame_id_.c_str());
+        }
+        id_file.close();
+    } else {
+        ROS_WARN("Could not find zone_info at: %s. Defaulting to 'map'.", zone_info_path.c_str());
+        frame_id_ = "map";
+    }
+}
+
+std::string FrameLoader::getFrameId() {
+    return frame_id_;
 }
 
 std::string FrameLoader::getPredBinPath(int frame_index) {

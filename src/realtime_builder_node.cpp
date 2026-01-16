@@ -44,9 +44,10 @@ int main(int argc, char** argv) {
 
             // 5. 실시간 파이프라인 실행
             // 파일 기반 재생이므로 frame_id는 "map"으로 고정하여 시각화함
-            builder.processPipeline(frame_points, "map");
+            builder.processPipeline(frame_points, loader.getFrameId().c_str());
 
-            ROS_INFO("Processed frame %d (%lu points)", current_frame_idx, frame_points.size());
+            ROS_INFO("Processed frame %d (%lu points) using frame_id: %s", 
+                current_frame_idx, frame_points.size(), loader.getFrameId().c_str());
         } else {
             // 파일이 없는 경우 에러가 아니라 건너뜀 (데이터 번호가 연속적이지 않을 수 있음)
             ROS_DEBUG("Frame %d not found, skipping...", current_frame_idx);
