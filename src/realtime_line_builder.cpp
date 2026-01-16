@@ -51,21 +51,34 @@ void RealTimeLineBuilder::processPipeline(const std::vector<ldb::data_types::Poi
     // processGeneratorStage(active_voxels);
 }
 
-void RealTimeLineBuilder::publishVoxelCloud(const std::vector<ldb::data_types::Point>& voxels, const std::string& frame_id) {
+void RealTimeLineBuilder::publishVoxelCloud(const std::vector<linemapdraft_builder::data_types::Point>& voxels, const std::string& frame_id) {
     if (voxels.empty()) return;
+
     sensor_msgs::PointCloud2 output_msg;
     output_msg.header.stamp = ros::Time::now();
     output_msg.header.frame_id = frame_id;
 
+    // 1. PointCloud2 필드 구성 변경: "xyz" + "intensity"
     sensor_msgs::PointCloud2Modifier modifier(output_msg);
-    modifier.setPointCloud2FieldsByString(1, "xyz");
+    modifier.setPointCloud2FieldsByString(2, "xyz", "intensity"); 
     modifier.resize(voxels.size());
 
-    sensor_msgs::PointCloud2Iterator<float> out_x(output_msg, "x"), out_y(output_msg, "y"), out_z(output_msg, "z");
+    // 2. 각 필드에 대한 Iterator 생성
+    sensor_msgs::PointCloud2Iterator<float> out_x(output_msg, "x");
+    sensor_msgs::PointCloud2Iterator<float> out_y(output_msg, "y");
+    sensor_msgs::PointCloud2Iterator<float> out_z(output_msg, "z");
+    sensor_msgs::PointCloud2Iterator<float> out_i(output_msg, "intensity"); // Intensity 반복자 추가
+
+    // 3. 데이터 할당 루프
     for (const auto& v : voxels) {
-        *out_x = v.x; *out_y = v.y; *out_z = v.z;
-        ++out_x; ++out_y; ++out_z;
+        *out_x = v.x;
+        *out_y = v.y;
+        *out_z = v.z;
+        *out_i = v.yaw; // yaw 각도 값을 intensity 필드에 저장
+
+        ++out_x; ++out_y; ++out_z; ++out_i;
     }
+
     voxel_pub_.publish(output_msg);
 }
 

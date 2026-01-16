@@ -62,9 +62,13 @@ add_library(${PROJECT_NAME}
   src/realtime_voxel_manager.cpp
   src/realtime_line_builder.cpp
   src/real_time_map/FrameLoader.cpp
-  src/map_to_global_viewer.cpp
-  src/pointcloud_viewer.cpp
 )
+
+add_executable(map_to_global_viewer_node src/map_to_global_viewer.cpp)
+target_link_libraries(map_to_global_viewer_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+
+add_executable(pointcloud_viewer_node src/pointcloud_viewer.cpp)
+target_link_libraries(pointcloud_viewer_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
 # 노드 실행 파일명을 realtime_builder_node로 설정
 add_executable(realtime_builder_node src/realtime_builder_node.cpp)
