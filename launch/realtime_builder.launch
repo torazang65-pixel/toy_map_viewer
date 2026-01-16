@@ -5,6 +5,7 @@
   <arg name="date" default="2025-10-21-12-04-37_solati_v5_1" />
   <arg name="start_frame" default="0" />
   <arg name="end_frame" default="299" />
+  
   <arg name="playback_rate" default="10.0" /> 
   <arg name="voxel_size" default="0.5" />
   <arg name="yaw_voxel_num" default="1" />

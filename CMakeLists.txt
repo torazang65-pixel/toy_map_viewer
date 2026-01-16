@@ -62,6 +62,10 @@ add_library(${PROJECT_NAME}
   src/realtime_voxel_manager.cpp
   src/realtime_line_builder.cpp
   src/real_time_map/FrameLoader.cpp
+  src/polyline_generator.cpp
+  src/polyline_simplifier.cpp
+  src/common/io.cpp               
+  src/common/data_types.cpp       
 )
 
 add_executable(map_to_global_viewer_node src/map_to_global_viewer.cpp)

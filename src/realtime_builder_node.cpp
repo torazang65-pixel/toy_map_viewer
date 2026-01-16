@@ -36,14 +36,13 @@ int main(int argc, char** argv) {
                 p.x = pcl_pt.x;
                 p.y = pcl_pt.y;
                 p.z = pcl_pt.z;
-                p.yaw = 0.0f; // 바이너리 구조상 yaw 정보가 없으므로 0으로 초기화 
+                p.yaw = pcl_pt.intensity;
                 p.density = static_cast<uint32_t>(pcl_pt.intensity); // Intensity를 밀도로 매핑
                 p.polyline_id = linemapdraft_builder::data_types::Unclassified;
                 frame_points.push_back(p);
             }
 
             // 5. 실시간 파이프라인 실행
-            // 파일 기반 재생이므로 frame_id는 "map"으로 고정하여 시각화함
             builder.processPipeline(frame_points, loader.getFrameId().c_str());
 
             ROS_INFO("Processed frame %d (%lu points) using frame_id: %s", 
