@@ -65,7 +65,7 @@ CoordinateConverterV1::CoordinateConverterV1()
 
     std::string pkg_path = ros::package::getPath("realtime_line_generator");
     base_dir_ = pkg_path + "/data/";
-    sensor_dir_ = base_dir_ + "sensor/" + std::to_string(file_idx_) + "/";
+    sensor_dir_ = base_dir_ + "sensor/" + std::to_string(file_idx_) + "/pandar64_0/";
     output_dir_ = pkg_path + "/" + output_folder + std::to_string(file_idx_) + "/";
     pred_frames_dir_ = output_dir_ + "pred_frames/";
 

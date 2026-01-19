@@ -1,8 +1,8 @@
 package_name: "realtime_line_generator"
-file_idx: 0
-file_name: 0
+file_idx: 20184
+file_name: "20184"
 input_topic: "/points_raw"
-input_folder: "data/lane_change_data/map_latest/"
+input_folder: "data/issue/global_maps/"   # data/issue/global_maps/ or data/lane_change_data/map_latest/
 output_folder: "data/issue/converted_bin/"
 start_frame: 0
 playback_rate: 10.0
@@ -10,8 +10,8 @@ use_pred_frames: true
 frame_id: "map"
 sensor_frame: "pandar64_0" # pandar64_0 or pandar64_1
 vehicle_frame: "pcra"
-pred_folder: "model_output/" # issue_laneline_pred_nms or model_output
-coordinate_converter_version: 2
+pred_folder: "issue_laneline_pred_nms/" # issue_laneline_pred_nms or model_output
+coordinate_converter_version: 1
 
 voxel_size: 0.5
 yaw_voxel_num: 1
