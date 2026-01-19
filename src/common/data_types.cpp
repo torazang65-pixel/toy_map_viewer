@@ -28,7 +28,7 @@ Point computeAveragePoint(
 }
 
 void build_grid_map(const std::vector<data_types::Point>& points, float grid_size, data_types::GridMap& grid_map) {
-  ROS_INFO("Build Grid map...");
+  ROS_DEBUG("Build Grid map...");
 
   grid_map.clear();
 
@@ -42,7 +42,7 @@ void build_grid_map(const std::vector<data_types::Point>& points, float grid_siz
     grid_map[key].push_back(i);
   }
 
-  ROS_INFO("Grid map built. Total cells: %lu", grid_map.size());
+  ROS_DEBUG("Grid map built. Total cells: %lu", grid_map.size());
 }
 
 // 그리드 주변 이웃 점 인덱스 조회

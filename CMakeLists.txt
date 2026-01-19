@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(toy_map_viewer)
+project(realtime_line_generator)
 
 add_compile_options(-std=c++17)
 
@@ -18,79 +18,48 @@ find_package(catkin REQUIRED COMPONENTS
   linemapdraft_builder
 )
 
-find_package(OpenCV REQUIRED)
-
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS roscpp sensor_msgs
+  CATKIN_DEPENDS roscpp roslib sensor_msgs geometry_msgs interactive_markers pcl_ros pcl_conversions
 )
 
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS}
 )
 
 add_definitions(${PCL_DEFINITIONS})
 
 # 실행 파일 생성
-add_executable(bin_map_viewer
-  src/bin_map_viewer.cpp
-  src/viewer/PointCloudLayer.cpp
-  src/viewer/LaneLayer.cpp
-)
-
-add_executable(unified_converter_node
-  src/unified_converter_node.cpp
-  src/map_generator/MapConverter.cpp
-  src/map_generator/LaneUtils.cpp
-  src/map_generator/LaneCleaner.cpp
-  src/map_generator/LaneMerger.cpp
-  src/map_generator/CoordinateConverter.cpp
-  src/real_time_map/LineMapProcessor.cpp
-  src/real_time_map/FrameLoader.cpp
-  src/real_time_map/BatchSaver.cpp
-  src/real_time_map/VoxelBuilder.cpp
-  src/real_time_map/PCALaneGenerator.cpp
-  src/real_time_map/GreedyLaneGenerator.cpp
-  src/real_time_map/LaneClusterer.cpp
-)
-
 add_library(${PROJECT_NAME}
-  src/realtime_voxel_manager.cpp
-  src/realtime_line_builder.cpp
+  src/realtime_line_generator/MapConverterV2.cpp
+  src/real_time_map/CoordinateConverterV1.cpp
+  src/real_time_map/CoordinateConverterV2.cpp
+  src/realtime_line_generator/LaneUtils.cpp
+  src/realtime_line_generator/realtime_voxel_manager.cpp
+  src/realtime_line_generator/realtime_line_builder.cpp
   src/real_time_map/FrameLoader.cpp
-  src/polyline_generator.cpp
-  src/polyline_simplifier.cpp
-  src/post_processor.cpp
+  src/realtime_line_generator/polyline_generator.cpp
+  src/realtime_line_generator/polyline_simplifier.cpp
+  src/realtime_line_generator/post_processor.cpp
+  src/viewer/viewer_animation_loader.cpp
+  src/viewer/viewer_static_map_loader.cpp
   src/common/io.cpp               
   src/common/data_types.cpp       
 )
 
-add_executable(map_to_global_viewer_node src/map_to_global_viewer.cpp)
-target_link_libraries(map_to_global_viewer_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
-
-add_executable(pointcloud_viewer_node src/pointcloud_viewer.cpp)
-target_link_libraries(pointcloud_viewer_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
-
 # 노드 실행 파일명을 realtime_builder_node로 설정
-add_executable(realtime_builder_node src/realtime_builder_node.cpp)
+add_executable(realtime_builder_node src/nodes/realtime_builder_node.cpp)
 target_link_libraries(realtime_builder_node
   ${PROJECT_NAME}
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
 
-# 라이브러리 링크
-target_link_libraries(unified_converter_node
+add_executable(realtime_viewer_node src/nodes/realtime_viewer_node.cpp)
+target_link_libraries(realtime_viewer_node
+  ${PROJECT_NAME}
   ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${OpenCV_LIBRARIES}
-)
-
-target_link_libraries(bin_map_viewer 
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
 )

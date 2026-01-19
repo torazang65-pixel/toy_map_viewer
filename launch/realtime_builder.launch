@@ -1,37 +1,14 @@
 <launch>
+  <arg name="params_file" default="$(find realtime_line_generator)/config/realtime_builder.yaml" />
 
-    <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen"/>
-
-  <arg name="date" default="2025-10-21-12-04-37_solati_v5_1" />
-  <arg name="start_frame" default="0" />
-  <arg name="end_frame" default="299" />
-  
-  <arg name="playback_rate" default="10.0" /> 
-  <arg name="voxel_size" default="0.5" />
-  <arg name="yaw_voxel_num" default="1" />
-  <arg name="min_density_threshold" default="5" />
-  <arg name="max_voxel_age" default="100" />
-
-  <node name="pointcloud_viewer" pkg="toy_map_viewer" type="pointcloud_viewer_node" output="screen">
-    <param name="date" value="$(arg date)" />
+  <node pkg="rf_tf_broadcaster" type="sensor_tf_broadcaster_node" name="sensor_tf_broadcaster" output="screen">
+    <rosparam command="load" file="$(arg params_file)" />
+  </node>
+  <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen">
+    <rosparam command="load" file="$(arg params_file)" />
   </node>
 
-  <node name="map_to_global_viewer" pkg="toy_map_viewer" type="map_to_global_viewer_node" output="screen">
-    <param name="date" value="$(arg date)" />
+  <node pkg="realtime_line_generator" type="realtime_builder_node" name="realtime_builder_node" output="screen">
+    <rosparam command="load" file="$(arg params_file)" />
   </node>
-  
-  <!-- <node pkg="rosbag" type="play" name="sample_pc" args="-k $(find toy_map_viewer)/bag/kusn95_after.bag"/> -->
-
-  <node pkg="toy_map_viewer" type="realtime_builder_node" name="realtime_builder_node" output="screen">
-    <param name="date" value="$(arg date)" />
-    <param name="start_frame" value="$(arg start_frame)" />
-    <param name="end_frame" value="$(arg end_frame)" />
-    <param name="playback_rate" value="$(arg playback_rate)" />
-
-    <param name="voxel_size" value="$(arg voxel_size)" />
-    <param name="yaw_voxel_num" value="$(arg yaw_voxel_num)" />
-    <param name="max_voxel_age" value="$(arg max_voxel_age)" />
-  </node>
-
-  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find toy_map_viewer)/rviz/realtime_viewer.rviz" required="false" />
 </launch>

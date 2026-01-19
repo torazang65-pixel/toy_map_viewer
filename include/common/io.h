@@ -8,7 +8,7 @@ namespace linemapdraft_builder::io {
 
 bool load_points(const std::string &filename, std::vector<data_types::Point> &points);
 
-// bool write_points
+bool write_points(const std::string &filename, const std::vector<data_types::Point> &points);
 
 bool load_polylines(const std::string &filename, std::vector<std::vector<data_types::Point>> &polylines);
 

@@ -11,7 +11,7 @@
 namespace linemapdraft_builder::io {
 
 bool load_points(const std::string &filename, std::vector<data_types::Point> &points) {
-  ROS_INFO("Loading points...");
+  ROS_DEBUG("Loading points...");
   points.clear();
   std::ifstream ifs(filename, std::ifstream::binary);
   if (!ifs.is_open()) {
@@ -38,7 +38,31 @@ bool load_points(const std::string &filename, std::vector<data_types::Point> &po
   }
 
   ifs.close();
-  ROS_INFO("Loaded %u points from %s", num_points, filename.c_str());
+  ROS_DEBUG("Loaded %u points from %s", num_points, filename.c_str());
+  return true;
+}
+
+bool write_points(const std::string &filename, const std::vector<data_types::Point> &points) {
+  std::ofstream ofs(filename, std::ofstream::binary);
+  if (!ofs.is_open()) {
+    ROS_ERROR("Failed to open output file: %s", filename.c_str());
+    return false;
+  }
+
+  uint32_t num_points = static_cast<uint32_t>(points.size());
+  ofs.write((char *)(&num_points), 4);
+
+  for (const auto &p : points) {
+    ofs.write((char *)(&p.x), 4);
+    ofs.write((char *)(&p.y), 4);
+    ofs.write((char *)(&p.z), 4);
+    ofs.write((char *)(&p.yaw), 4);
+    ofs.write((char *)(&p.polyline_id), 4);
+    ofs.write((char *)(&p.density), 4);
+  }
+
+  ofs.close();
+  ROS_DEBUG("Wrote %u points to %s", num_points, filename.c_str());
   return true;
 }
 
@@ -77,7 +101,7 @@ bool load_polylines(const std::string &filename, std::vector<std::vector<data_ty
   }
 
   polylines_ifs.close();
-  ROS_INFO("Loaded %u polylines from %s", polyline_num, filename.c_str());
+  ROS_DEBUG("Loaded %u polylines from %s", polyline_num, filename.c_str());
   return true;
 }
 
@@ -112,7 +136,7 @@ bool write_polylines(const std::string &filename, const std::vector<std::vector<
   }
 
   ofs.close();
-  ROS_INFO("Wrote %u polylines to %s", current_polyline_id, filename.c_str());
+  ROS_DEBUG("Wrote %u polylines to %s", current_polyline_id, filename.c_str());
   return true;
 }
 
@@ -142,8 +166,8 @@ bool write_points_from_polylines(const std::string &filename, const std::vector<
   ofs.write((char *)&out_point_num, 4);  // Write the number of points at the beginning
 
   ofs.close();
-  ROS_INFO("done. (%s)", filename.c_str());
-  ROS_INFO("out_point_num: %d", out_point_num);
+  ROS_DEBUG("done. (%s)", filename.c_str());
+  ROS_DEBUG("out_point_num: %d", out_point_num);
   return true;
 }
 
