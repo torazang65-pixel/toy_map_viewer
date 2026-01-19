@@ -4,14 +4,14 @@
 
   <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen"/>
 
-  <arg name="date" default="2025-11-12-14-13-36_maxen_v6_1" />
+  <arg name="date" default="2025-09-26-14-21-28_maxen_v6_2" />
 
   <node name="pointcloud_viewer" pkg="toy_map_viewer" type="pointcloud_viewer_node" output="screen">
-    <param name="date" value="$(arg date)" />
+    <rosparam file="$(arg config_file)" command="load"/>
   </node>
 
   <node name="map_to_global_viewer" pkg="toy_map_viewer" type="map_to_global_viewer_node" output="screen">
-    <param name="date" value="$(arg date)" />
+    <rosparam file="$(arg config_file)" command="load"/>
   </node>
   
   <!-- <node pkg="rosbag" type="play" name="sample_pc" args="-k $(find toy_map_viewer)/bag/kusn95_after.bag"/> -->

@@ -166,12 +166,12 @@ void RealTimeLineBuilder::processGeneratorStage(std::vector<ldb::data_types::Poi
     // -------------------------------------------------------
     // [STEP 4] 2차 단순화 (병합 후 최종 정밀화: VW + RDP)
     // -------------------------------------------------------
-    // for (auto& polyline : merged_polylines) {
-    //     if (polyline.size() > 2) {
-    //         lps::vw(polyline, vw_eps_2_); // 더 큰 면적 임계값 적용
-    //         lps::rdp(polyline, rdp_eps_); // RDP로 직선 구간 단순화
-    //     }
-    // }
+    for (auto& polyline : merged_polylines) {
+        if (polyline.size() > 2) {
+            lps::vw(polyline, vw_eps_2_); // 더 큰 면적 임계값 적용
+            lps::rdp(polyline, rdp_eps_); // RDP로 직선 구간 단순화
+        }
+    }
 
     // -------------------------------------------------------
     // [STEP 5] 시각화 발행
