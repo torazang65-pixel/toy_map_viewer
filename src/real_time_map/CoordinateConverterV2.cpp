@@ -229,6 +229,21 @@ bool CoordinateConverterV2::processFrame(int file_idx, int frame_index) {
         }
     }
 
+    Eigen::Vector4f sensor_pos_in_sensor_frame(0.0f, 0.0f, 0.0f, 1.0f);
+    Eigen::Vector4f sensor_pos_in_target_frame = T_final * sensor_pos_in_sensor_frame;
+
+    Eigen::Quaternionf q_transformed(T_final.block<3, 3>(0, 0));
+    Eigen::Vector3f euler = q_transformed.toRotationMatrix().eulerAngles(0, 1, 2);
+
+    Point6D sensor_pose;
+    sensor_pose.x = sensor_pos_in_target_frame(0);
+    sensor_pose.y = sensor_pos_in_target_frame(1);
+    sensor_pose.z = sensor_pos_in_target_frame(2);
+    sensor_pose.dx = euler(0);
+    sensor_pose.dy = euler(1);
+    sensor_pose.dz = euler(2);
+    vehicle_trajectory_.push_back(sensor_pose);
+
     return true;
 }
 
@@ -255,6 +270,33 @@ void CoordinateConverterV2::saveGlobalMaps() {
 
     saveMapToFile(global_bin_map_, output_dir_ + "lidar_seq_1.bin", false);
     ROS_INFO("Saved BIN Global Map to lidar_seq_1.bin");
+
+    saveVehicleTrajectory();
+}
+
+void CoordinateConverterV2::saveVehicleTrajectory() {
+    if (vehicle_trajectory_.empty()) {
+        ROS_WARN("No vehicle trajectory to save");
+        return;
+    }
+
+    std::vector<ldb::data_types::Point> points;
+    points.reserve(vehicle_trajectory_.size());
+    for (const auto& pose : vehicle_trajectory_) {
+        ldb::data_types::Point p;
+        p.x = static_cast<float>(pose.x);
+        p.y = static_cast<float>(pose.y);
+        p.z = static_cast<float>(pose.z);
+        p.yaw = static_cast<float>(pose.dz);
+        p.vz = 0.0f;
+        p.polyline_id = 0;
+        p.density = 1;
+        points.push_back(p);
+    }
+
+    std::string trajectory_filename = output_dir_ + "vehicle_trajectory.bin";
+    ldb::io::write_points(trajectory_filename, points);
+    ROS_INFO("Saved Vehicle Trajectory to vehicle_trajectory.bin (%lu poses)", vehicle_trajectory_.size());
 }
 
 void CoordinateConverterV2::run() {

@@ -30,6 +30,7 @@ public:
 private:
     bool processFrame(int file_idx, int frame_index);
     void saveGlobalMaps();
+    void saveVehicleTrajectory();
     void saveMapToFile(const typename pcl::PointCloud<pcl::PointXYZI>::Ptr& map,
                        const std::string& filename, bool filter_mode);
 
@@ -58,6 +59,7 @@ private:
     std::string target_frame_id_;
     std::string frame_id_file_;
     int file_idx_;
+    std::vector<Point6D> vehicle_trajectory_;
     std::size_t pred_frames_saved_ = 0;
     std::size_t pred_frame_points_saved_ = 0;
 };

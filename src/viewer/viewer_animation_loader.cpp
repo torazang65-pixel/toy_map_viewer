@@ -5,6 +5,7 @@
 #include <ros/package.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
+#include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
 #include <filesystem>
@@ -27,6 +28,7 @@ AnimationLoader::AnimationLoader(ros::NodeHandle& nh, OffsetState& offset)
     nh_.param("publish_voxels", publish_voxels_, true);
     nh_.param("publish_polylines", publish_polylines_, true);
     nh_.param("publish_merged_polylines", publish_merged_polylines_, true);
+    nh_.param("publish_vehicle_pose", publish_vehicle_pose_, true);
 
     std::string pkg_path = ros::package::getPath("realtime_line_generator");
     normalizeFolder(output_folder_);
@@ -37,11 +39,13 @@ AnimationLoader::AnimationLoader(ros::NodeHandle& nh, OffsetState& offset)
     voxels_dir_ = output_root_ + "voxels/";
     polylines_dir_ = output_root_ + "polylines/";
     merged_polylines_dir_ = output_root_ + "merged_polylines/";
+    vehicle_trajectory_path_ = output_root_ + "vehicle_trajectory.bin";
 
     frame_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("frame_points", 1);
     voxel_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("active_voxels", 1);
     polyline_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("detected_polylines", 1);
     merged_polyline_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("merged_polylines", 1);
+    vehicle_pose_pub_ = nh_.advertise<visualization_msgs::Marker>("vehicle_pose", 1);
 
     if (frame_step_ < 1) {
         frame_step_ = 1;
@@ -54,6 +58,12 @@ AnimationLoader::AnimationLoader(ros::NodeHandle& nh, OffsetState& offset)
     }
     if (end_frame_ < start_frame_) {
         ROS_WARN("No frame files found under %s", frame_dir.c_str());
+    }
+
+    if (publish_vehicle_pose_) {
+        if (!loadPointsIfExists(vehicle_trajectory_path_, vehicle_trajectory_)) {
+            ROS_WARN("Vehicle trajectory not found: %s", vehicle_trajectory_path_.c_str());
+        }
     }
 }
 
@@ -209,6 +219,42 @@ void AnimationLoader::publishPolylines(
     pub.publish(marker_array);
 }
 
+void AnimationLoader::publishVehiclePose(int frame_index) {
+    if (!publish_vehicle_pose_) {
+        return;
+    }
+    if (vehicle_trajectory_.empty()) {
+        return;
+    }
+    if (frame_index < 0 || static_cast<size_t>(frame_index) >= vehicle_trajectory_.size()) {
+        return;
+    }
+
+    const auto& pose = vehicle_trajectory_[frame_index];
+    MaybeInitOffsetFromPoints(offset_, vehicle_trajectory_);
+
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = frame_id_;
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "vehicle_pose";
+    marker.id = 0;
+    marker.type = visualization_msgs::Marker::SPHERE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.pose.position.x = pose.x - offset_.x;
+    marker.pose.position.y = pose.y - offset_.y;
+    marker.pose.position.z = pose.z;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 0.8f;
+    marker.scale.y = 0.8f;
+    marker.scale.z = 0.8f;
+    marker.color.r = 0.2f;
+    marker.color.g = 0.6f;
+    marker.color.b = 1.0f;
+    marker.color.a = 1.0f;
+
+    vehicle_pose_pub_.publish(marker);
+}
+
 void AnimationLoader::publishFrame(int frame_index) {
     std::vector<linemapdraft_builder::data_types::Point> frame_points;
     std::vector<linemapdraft_builder::data_types::Point> voxel_points;
@@ -243,6 +289,7 @@ void AnimationLoader::publishFrame(int frame_index) {
         MaybeInitOffsetFromPolylines(offset_, merged_polylines);
         publishPolylines(merged_polylines, merged_polyline_pub_, "merged_polylines", 1.0f, 0.2f, 0.2f);
     }
+    publishVehiclePose(frame_index);
 }
 
 }  // namespace realtime_line_generator::viewer

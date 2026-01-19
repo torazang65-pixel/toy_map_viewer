@@ -10,6 +10,7 @@ use_pred_frames: true
 publish_voxels: true
 publish_polylines: true
 publish_merged_polylines: true
+publish_vehicle_pose: true
 publish_map_points: true
 publish_converted_filtered: true
 publish_converted_raw: true
