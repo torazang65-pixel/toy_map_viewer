@@ -43,14 +43,16 @@ private:
     // polyline_simplifier
     bool use_vw_;
     bool use_rdp_;
-    float vw_eps_;
-    float rdp_eps_;
+    float vw_eps_1_; // 1차 단순화 면적 임계값
 
     // post processing
     float merge_min_dist_th_, merge_max_dist_th_;
     float merge_min_angle_th_, merge_max_angle_th_;
     float min_polyline_length_;
 
+    // polyline_simplifier 2
+    float vw_eps_2_; // 2차 단순화 면적 임계값
+    float rdp_eps_;  // 2차 단순화 거리 임계값
 };
 
 } // namespace toy_map_viewer

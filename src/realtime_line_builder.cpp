@@ -12,6 +12,7 @@ namespace ldb = linemapdraft_builder;
 RealTimeLineBuilder::RealTimeLineBuilder(ros::NodeHandle& nh) {
     nh.param("voxel_size", voxel_size_, 0.5f);
     nh.param("yaw_voxel_num", yaw_voxel_num_, 1);
+    nh.param("max_voxel_age", max_voxel_age_, 100);
 
     voxel_manager_ = std::make_unique<RealTimeVoxelManager>(voxel_size_, yaw_voxel_num_);
     voxel_pub_ = nh.advertise<sensor_msgs::PointCloud2>("active_voxels", 1);
@@ -25,11 +26,8 @@ RealTimeLineBuilder::RealTimeLineBuilder(ros::NodeHandle& nh) {
 
     polyline_pub_ = nh.advertise<visualization_msgs::MarkerArray>("detected_polylines", 1);
 
-    //polyline simplifier
-    nh.param("use_vw", use_vw_, true);
-    nh.param("use_rdp", use_rdp_, true);
-    nh.param("vw_eps", vw_eps_, 0.5f);  // 면적 임계값
-    nh.param("rdp_eps", rdp_eps_, 0.5f); // 거리 임계값
+    // polyline simplifier
+    nh.param("VW_eps_1", vw_eps_1_, 0.5f);
 
     // Post Processor 파라미터 로드
     nh.param("merge_min_dist_th", merge_min_dist_th_, 1.0f);
@@ -37,6 +35,10 @@ RealTimeLineBuilder::RealTimeLineBuilder(ros::NodeHandle& nh) {
     nh.param("merge_min_angle_th", merge_min_angle_th_, 0.1f);
     nh.param("merge_max_angle_th", merge_max_angle_th_, 0.3f);
     nh.param("min_polyline_length", min_polyline_length_, 3.0f);
+
+    // polyline simplifier 2
+    nh.param("VW_eps_2", vw_eps_2_, 3.0f);
+    nh.param("RDP_eps", rdp_eps_, 0.5f);
 }
 
 void RealTimeLineBuilder::callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
@@ -69,8 +71,7 @@ void RealTimeLineBuilder::processPipeline(const std::vector<ldb::data_types::Poi
     // 2. 오래된 보셀 제거 (Aging) 
     // 매 프레임 호출하거나, CPU 부하를 줄이기 위해 n프레임마다 호출할 수 있습니다.
     if (frame_counter_ % 10 == 0) { 
-        uint32_t max_age = 100; // 예: 100프레임(약 10초) 동안 업데이트 없으면 삭제
-        voxel_manager_->clearStaleVoxels(frame_counter_, max_age);
+        voxel_manager_->clearStaleVoxels(frame_counter_, max_voxel_age_);
     }
 
     // 3. 필터링된 최신 보셀들만 가져와서 다음 단계 진행
@@ -120,12 +121,14 @@ void RealTimeLineBuilder::publishVoxelCloud(const std::vector<linemapdraft_build
 void RealTimeLineBuilder::processGeneratorStage(std::vector<ldb::data_types::Point>& active_voxels, const std::string& frame_id) {
     if (active_voxels.empty()) return;
 
-    // 1. 현재 활성화된 보셀들로 GridMap 빌드 (탐색 최적화)
+    // -------------------------------------------------------
+    // [STEP 1] Polyline 생성
+    // -------------------------------------------------------
     ldb::data_types::GridMap grid;
     float grid_size = neighbor_dist_thresh_ * 0.9f;
     ldb::data_types::build_grid_map(active_voxels, grid_size, grid);
 
-    // 2. 폴리라인 생성 로직 실행
+    // 폴리라인 생성 로직 실행
     std::vector<std::vector<ldb::data_types::Point>> polylines;
     
     // 실시간에서는 min_density를 0으로 두거나 파라미터화하여 조절
@@ -136,22 +139,19 @@ void RealTimeLineBuilder::processGeneratorStage(std::vector<ldb::data_types::Poi
         alpha_, beta_, drop_width_
     );
 
-    // 3. 폴리라인 단순화 적용
+    // -------------------------------------------------------
+    // [STEP 2] 1차 단순화 (VW만 적용, 작은 노이즈 제거)
+    // -------------------------------------------------------
     namespace lps = ldb::polyline_simplifier;
     for (auto& polyline : polylines) {
-        if (polyline.size() <= 2) continue;
-
-        if (use_vw_) {
-            // 삼각형 면적 기반으로 중요하지 않은 점 제거
-            lps::vw(polyline, vw_eps_);
-        }
-        if (use_rdp_) {
-            // 직선과의 거리가 먼 점들만 남기는 RDP 적용
-            lps::rdp(polyline, rdp_eps_);
+        if (polyline.size() > 2) {
+            lps::vw(polyline, vw_eps_1_); 
         }
     }
 
-    // 4. 포스트 프로세싱 (Post-Processor)
+    // -------------------------------------------------------
+    // [STEP 3] 포스트 프로세싱 (병합 및 짧은 선 제거)
+    // -------------------------------------------------------
     namespace lpp = ldb::post_processor;
     
     // 끊어진 차선 병합
@@ -163,8 +163,20 @@ void RealTimeLineBuilder::processGeneratorStage(std::vector<ldb::data_types::Poi
     // 너무 짧은 차선 제거
     lpp::dropPolylines(merged_polylines, min_polyline_length_);
 
-    // 5. 시각화 (MarkerArray 발행)
-    publishPolylines(polylines, frame_id);
+    // -------------------------------------------------------
+    // [STEP 4] 2차 단순화 (병합 후 최종 정밀화: VW + RDP)
+    // -------------------------------------------------------
+    // for (auto& polyline : merged_polylines) {
+    //     if (polyline.size() > 2) {
+    //         lps::vw(polyline, vw_eps_2_); // 더 큰 면적 임계값 적용
+    //         lps::rdp(polyline, rdp_eps_); // RDP로 직선 구간 단순화
+    //     }
+    // }
+
+    // -------------------------------------------------------
+    // [STEP 5] 시각화 발행
+    // -------------------------------------------------------
+    publishPolylines(merged_polylines, frame_id);
 }
 
 void RealTimeLineBuilder::publishPolylines(const std::vector<std::vector<ldb::data_types::Point>>& polylines, const std::string& frame_id) {

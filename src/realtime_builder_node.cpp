@@ -1,33 +1,76 @@
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <toy_map_viewer/realtime_line_builder.h>
 #include "real_time_map/FrameLoader.h"
+#include <filesystem> // C++17 필욕
+#include <vector>
+#include <algorithm>
+#include <string>
+
+namespace fs = std::filesystem;
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "realtime_builder_node");
     ros::NodeHandle nh("~");
 
+    // 1. 기본 설정 및 로더 초기화
     FrameLoader loader(nh);
     toy_map_viewer::RealTimeLineBuilder builder(nh);
 
-    // 2. 재생 루프 제어 파라미터
-    int start_frame, end_frame;
+    // 2. 데이터 경로 파악 (FrameLoader의 경로와 일치해야 함)
+    std::string date;
+    nh.param<std::string>("date", date, "2025-09-26-14-21-28_maxen_v6_2");
+    std::string pkg_path = ros::package::getPath("toy_map_viewer");
+    std::string frames_path = pkg_path + "/data/lane_change_data_converted/Raw/" + date + "/frames/";
+
+    // 3. 디렉토리 스캔을 통해 프레임 인덱스 수집
+    std::vector<int> frame_indices;
+    try {
+        if (fs::exists(frames_path) && fs::is_directory(frames_path)) {
+            for (const auto& entry : fs::directory_iterator(frames_path)) {
+                std::string filename = entry.path().filename().string();
+                // 파일 형식이 'frame_N.bin' 또는 'N.bin' 인 경우 숫자만 추출
+                // 예: frame_123.bin -> 123
+                if (filename.find("frame_") != std::string::npos) {
+                    size_t start = filename.find("_") + 1;
+                    size_t end = filename.find(".bin");
+                    if (start != std::string::npos && end != std::string::npos) {
+                        frame_indices.push_back(std::stoi(filename.substr(start, end - start)));
+                    }
+                }
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        ROS_ERROR("Filesystem error: %s", e.what());
+        return 1;
+    }
+
+    if (frame_indices.empty()) {
+        ROS_ERROR("No frames found in directory: %s", frames_path.c_str());
+        return 1;
+    }
+
+    // 4. 프레임 번호 정렬 (순차 처리를 위해)
+    std::sort(frame_indices.begin(), frame_indices.end());
+    int total_frames = frame_indices.size();
+
+    // 5. 재생 속도 설정
     double loop_rate_hz;
-    nh.param("start_frame", start_frame, 0); // 루프를 시작할 프레임 번호
-    nh.param("end_frame", end_frame, 299);     // 루프를 종료할 프레임 번호
-    nh.param("playback_rate", loop_rate_hz, 10.0); // 재생 속도 (Hz)
-
+    nh.param("playback_rate", loop_rate_hz, 10.0);
     ros::Rate loop_rate(loop_rate_hz);
-    int current_frame_idx = start_frame;
 
-    ROS_INFO("[RealTimeBuilder] Starting file-based playback: Frame %d to %d", start_frame, end_frame);
+    ROS_INFO("[RealTimeBuilder] Auto-detected %d frames in %s", total_frames, frames_path.c_str());
+    ROS_INFO("[RealTimeBuilder] Processing from frame %d to %d", frame_indices.front(), frame_indices.back());
 
-    while (ros::ok() && current_frame_idx <= end_frame) {
-        // 3. 파일 로드 (Binary -> PCL PointCloud) 
-        // FrameLoader::loadFrame은 내부적으로 클러스터 단위로 점들을 읽어 pcl::PointXYZI로 변환함 
+    // 6. 감지된 모든 프레임 순회
+    for (int current_frame_idx : frame_indices) {
+        if (!ros::ok()) break;
+
+        // 파일 로드
         auto cloud = loader.loadFrame(current_frame_idx);
 
         if (cloud != nullptr) {
-            // 4. PCL 형식을 빌더 내부 Point 형식으로 변환
+            // PCL 형식을 빌더 내부 Point 형식으로 변환
             std::vector<linemapdraft_builder::data_types::Point> frame_points;
             frame_points.reserve(cloud->size());
 
@@ -37,27 +80,21 @@ int main(int argc, char** argv) {
                 p.y = pcl_pt.y;
                 p.z = pcl_pt.z;
                 p.yaw = pcl_pt.intensity;
-                p.density = static_cast<uint32_t>(pcl_pt.intensity); // Intensity를 밀도로 매핑
+                p.density = static_cast<uint32_t>(pcl_pt.intensity);
                 p.polyline_id = linemapdraft_builder::data_types::Unclassified;
                 frame_points.push_back(p);
             }
 
-            // 5. 실시간 파이프라인 실행
+            // 실시간 파이프라인 실행
             builder.processPipeline(frame_points, loader.getFrameId().c_str());
 
-            ROS_INFO("Processed frame %d (%lu points) using frame_id: %s", 
-                current_frame_idx, frame_points.size(), loader.getFrameId().c_str());
-        } else {
-            // 파일이 없는 경우 에러가 아니라 건너뜀 (데이터 번호가 연속적이지 않을 수 있음)
-            ROS_DEBUG("Frame %d not found, skipping...", current_frame_idx);
+            ROS_INFO("Processed frame %d (%lu points)", current_frame_idx, frame_points.size());
         }
 
-        current_frame_idx++;
-        
         ros::spinOnce();
         loop_rate.sleep();
     }
 
-    ROS_INFO("[RealTimeBuilder] Playback complete.");
+    ROS_INFO("[RealTimeBuilder] All detected frames processed.");
     return 0;
 }

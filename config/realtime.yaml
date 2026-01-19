@@ -1,0 +1,40 @@
+date: 2025-11-12-14-13-36_maxen_v6_1
+playback_rate: 10
+
+# voxelization params
+voxel_size: 0.5
+yaw_voxel_num: 1
+max_voxel_age: 100 
+
+# polyline generator params
+neighbor_dist_thresh: 2.0
+cylinder_search_width: 1.0
+alpha: 0.7
+beta: 1.0
+drop_width: 1.0
+
+# first polyline simplification params
+# Visvalingam–Whyatt only
+VW_eps_1: 0.3
+
+# post process params
+merge_min_dist_th: 1.0
+merge_max_dist_th: 10.0
+merge_min_angle_th: 0.1
+merge_max_angle_th: 0.3
+min_polyline_length: 20.0
+
+# second polyline simplification params
+# Visvalingam–Whyatt + Ramer–Douglas–Peucker
+VW_eps_2: 0.2
+RDP_eps: 0.1
+
+# polyline resampling params
+sampling_distance: 10.0
+
+# evaluation params
+chamfer_dist_th: 0.5
+point_iou_th: 0.2
+resample_distance: 0.3
+dist_th: 0.5
+yaw_th: 0.8
