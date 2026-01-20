@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include <common/data_types.h>
 #include <viewer/viewer_offset.h>
 
 namespace realtime_line_generator::viewer {
@@ -13,20 +14,18 @@ class AnimationLoader {
 public:
     AnimationLoader(ros::NodeHandle& nh, OffsetState& offset);
 
-    void Run();
+    void Start();
+    void Stop();
+    void Pause();
+    void Resume();
+    bool IsPlaying() const { return is_playing_; }
+    int CurrentFrame() const { return current_frame_; }
+    void Seek(int frame_index);
 
 private:
-    void normalizeFolder(std::string& folder);
+    void timerCallback(const ros::TimerEvent& event);
     std::string framePath(const std::string& dir, int index) const;
     int maxFrameIndexInDir(const std::string& dir) const;
-    bool loadPointsIfExists(
-        const std::string& path,
-        std::vector<linemapdraft_builder::data_types::Point>& points);
-    bool loadPolylinesIfExists(
-        const std::string& path,
-        std::vector<std::vector<linemapdraft_builder::data_types::Point>>& polylines);
-    void publishPointCloud(const std::vector<linemapdraft_builder::data_types::Point>& points,
-                           ros::Publisher& pub);
     void publishPolylines(const std::vector<std::vector<linemapdraft_builder::data_types::Point>>& polylines,
                           ros::Publisher& pub,
                           const std::string& ns,
@@ -37,6 +36,7 @@ private:
     ros::NodeHandle nh_;
     OffsetState& offset_;
 
+    ros::Timer timer_;
     ros::Publisher frame_pub_;
     ros::Publisher voxel_pub_;
     ros::Publisher polyline_pub_;
@@ -56,9 +56,11 @@ private:
     int file_idx_ = 0;
     int start_frame_ = 0;
     int end_frame_ = 0;
+    int current_frame_ = 0;
     int frame_step_ = 1;
     double playback_rate_ = 10.0;
     bool loop_playback_ = true;
+    bool is_playing_ = false;
     bool publish_frame_points_ = true;
     bool use_pred_frames_ = false;
     bool publish_voxels_ = true;

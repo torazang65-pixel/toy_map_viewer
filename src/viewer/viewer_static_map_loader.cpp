@@ -1,18 +1,13 @@
 #include <viewer/viewer_static_map_loader.h>
+#include <viewer/viewer_utils.h>
 
-#include <common/io.h>
 #include <geometry_msgs/Point.h>
 #include <ros/package.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/point_cloud2_iterator.h>
 #include <visualization_msgs/MarkerArray.h>
 
 #include <array>
 #include <cmath>
-#include <filesystem>
 #include <unordered_map>
-
-namespace fs = std::filesystem;
 
 namespace realtime_line_generator::viewer {
 
@@ -63,7 +58,7 @@ StaticMapLoader::StaticMapLoader(ros::NodeHandle& nh, OffsetState& offset)
     nh_.param("publish_converted_raw", publish_converted_raw_, true);
 
     std::string pkg_path = ros::package::getPath("realtime_line_generator");
-    normalizeFolder(output_folder_);
+    NormalizeFolder(output_folder_);
     output_root_ = pkg_path + "/" + output_folder_ + std::to_string(file_idx_) + "/";
     converted_root_ = output_root_;
     map_points_path_ = output_root_ + "points_seq_0.bin";
@@ -75,76 +70,24 @@ StaticMapLoader::StaticMapLoader(ros::NodeHandle& nh, OffsetState& offset)
 
 void StaticMapLoader::Publish() {
     std::vector<linemapdraft_builder::data_types::Point> map_points;
-    if (publish_map_points_ && loadPointsIfExists(map_points_path_, map_points)) {
+    if (publish_map_points_ && LoadPointsIfExists(map_points_path_, map_points)) {
         MaybeInitOffsetFromPoints(offset_, map_points);
         publishPointsByPolylineId(map_points, map_points_pub_, "mapconverter_points", 0.2f);
     }
 
     std::vector<linemapdraft_builder::data_types::Point> converted_points;
     std::string converted_filtered_path = converted_root_ + "lidar_seq_0.bin";
-    if (publish_converted_filtered_ && loadPointsIfExists(converted_filtered_path, converted_points)) {
+    if (publish_converted_filtered_ && LoadPointsIfExists(converted_filtered_path, converted_points)) {
         MaybeInitOffsetFromPoints(offset_, converted_points);
-        publishPointCloud(converted_points, converted_map_pub_);
+        PublishPointCloud(converted_points, offset_, frame_id_, converted_map_pub_);
     }
 
     converted_points.clear();
     std::string converted_raw_path = converted_root_ + "lidar_seq_1.bin";
-    if (publish_converted_raw_ && loadPointsIfExists(converted_raw_path, converted_points)) {
+    if (publish_converted_raw_ && LoadPointsIfExists(converted_raw_path, converted_points)) {
         MaybeInitOffsetFromPoints(offset_, converted_points);
-        publishPointCloud(converted_points, converted_map_raw_pub_);
+        PublishPointCloud(converted_points, offset_, frame_id_, converted_map_raw_pub_);
     }
-}
-
-void StaticMapLoader::normalizeFolder(std::string& folder) {
-    if (!folder.empty() && folder.back() != '/') {
-        folder.push_back('/');
-    }
-}
-
-bool StaticMapLoader::loadPointsIfExists(
-    const std::string& path,
-    std::vector<linemapdraft_builder::data_types::Point>& points) {
-    if (!fs::exists(path)) {
-        return false;
-    }
-    return linemapdraft_builder::io::load_points(path, points);
-}
-
-void StaticMapLoader::publishPointCloud(const std::vector<linemapdraft_builder::data_types::Point>& points,
-                                        ros::Publisher& pub) {
-    if (points.empty()) {
-        return;
-    }
-
-    sensor_msgs::PointCloud2 msg;
-    msg.header.stamp = ros::Time::now();
-    msg.header.frame_id = frame_id_;
-
-    sensor_msgs::PointCloud2Modifier modifier(msg);
-    modifier.setPointCloud2Fields(4,
-                                  "x", 1, sensor_msgs::PointField::FLOAT32,
-                                  "y", 1, sensor_msgs::PointField::FLOAT32,
-                                  "z", 1, sensor_msgs::PointField::FLOAT32,
-                                  "intensity", 1, sensor_msgs::PointField::FLOAT32);
-    modifier.resize(points.size());
-
-    sensor_msgs::PointCloud2Iterator<float> out_x(msg, "x");
-    sensor_msgs::PointCloud2Iterator<float> out_y(msg, "y");
-    sensor_msgs::PointCloud2Iterator<float> out_z(msg, "z");
-    sensor_msgs::PointCloud2Iterator<float> out_i(msg, "intensity");
-
-    for (const auto& p : points) {
-        *out_x = p.x - offset_.x;
-        *out_y = p.y - offset_.y;
-        *out_z = p.z;
-        *out_i = p.yaw;
-        ++out_x;
-        ++out_y;
-        ++out_z;
-        ++out_i;
-    }
-
-    pub.publish(msg);
 }
 
 void StaticMapLoader::publishPointsByPolylineId(

@@ -15,12 +15,6 @@ public:
     void Publish();
 
 private:
-    void normalizeFolder(std::string& folder);
-    bool loadPointsIfExists(
-        const std::string& path,
-        std::vector<linemapdraft_builder::data_types::Point>& points);
-    void publishPointCloud(const std::vector<linemapdraft_builder::data_types::Point>& points,
-                           ros::Publisher& pub);
     void publishPointsByPolylineId(const std::vector<linemapdraft_builder::data_types::Point>& points,
                                    ros::Publisher& pub,
                                    const std::string& ns,

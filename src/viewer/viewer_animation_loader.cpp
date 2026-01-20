@@ -1,10 +1,8 @@
 #include <viewer/viewer_animation_loader.h>
+#include <viewer/viewer_utils.h>
 
-#include <common/io.h>
 #include <geometry_msgs/Point.h>
 #include <ros/package.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/point_cloud2_iterator.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
@@ -31,7 +29,7 @@ AnimationLoader::AnimationLoader(ros::NodeHandle& nh, OffsetState& offset)
     nh_.param("publish_vehicle_pose", publish_vehicle_pose_, true);
 
     std::string pkg_path = ros::package::getPath("realtime_line_generator");
-    normalizeFolder(output_folder_);
+    NormalizeFolder(output_folder_);
     output_root_ = pkg_path + "/" + output_folder_ + std::to_string(file_idx_) + "/";
 
     frames_dir_ = output_root_ + "frames/";
@@ -60,35 +58,65 @@ AnimationLoader::AnimationLoader(ros::NodeHandle& nh, OffsetState& offset)
         ROS_WARN("No frame files found under %s", frame_dir.c_str());
     }
 
+    current_frame_ = start_frame_;
+
     if (publish_vehicle_pose_) {
-        if (!loadPointsIfExists(vehicle_trajectory_path_, vehicle_trajectory_)) {
+        if (!LoadPointsIfExists(vehicle_trajectory_path_, vehicle_trajectory_)) {
             ROS_WARN("Vehicle trajectory not found: %s", vehicle_trajectory_path_.c_str());
         }
     }
 }
 
-void AnimationLoader::Run() {
-    ros::Rate loop_rate(playback_rate_);
-    int current_frame = start_frame_;
+void AnimationLoader::Start() {
+    current_frame_ = start_frame_;
+    is_playing_ = true;
+    timer_ = nh_.createTimer(
+        ros::Duration(1.0 / playback_rate_),
+        &AnimationLoader::timerCallback, this);
+    ROS_INFO("Animation started from frame %d", current_frame_);
+}
 
-    while (ros::ok()) {
-        while (ros::ok() && current_frame <= end_frame_) {
-            publishFrame(current_frame);
-            current_frame += frame_step_;
-            ros::spinOnce();
-            loop_rate.sleep();
-        }
-        if (!loop_playback_) {
-            break;
-        }
-        current_frame = start_frame_;
+void AnimationLoader::Stop() {
+    timer_.stop();
+    is_playing_ = false;
+    current_frame_ = start_frame_;
+    ROS_INFO("Animation stopped");
+}
+
+void AnimationLoader::Pause() {
+    timer_.stop();
+    is_playing_ = false;
+    ROS_INFO("Animation paused at frame %d", current_frame_);
+}
+
+void AnimationLoader::Resume() {
+    if (!is_playing_) {
+        is_playing_ = true;
+        timer_.start();
+        ROS_INFO("Animation resumed from frame %d", current_frame_);
     }
 }
 
-void AnimationLoader::normalizeFolder(std::string& folder) {
-    if (!folder.empty() && folder.back() != '/') {
-        folder.push_back('/');
+void AnimationLoader::Seek(int frame_index) {
+    if (frame_index >= start_frame_ && frame_index <= end_frame_) {
+        current_frame_ = frame_index;
+        publishFrame(current_frame_);
+        ROS_INFO("Seeked to frame %d", current_frame_);
+    } else {
+        ROS_WARN("Seek frame %d out of range [%d, %d]", frame_index, start_frame_, end_frame_);
     }
+}
+
+void AnimationLoader::timerCallback(const ros::TimerEvent& event) {
+    if (current_frame_ > end_frame_) {
+        if (!loop_playback_) {
+            Stop();
+            return;
+        }
+        current_frame_ = start_frame_;
+    }
+    publishFrame(current_frame_);
+    current_frame_ += frame_step_;
 }
 
 std::string AnimationLoader::framePath(const std::string& dir, int index) const {
@@ -97,6 +125,7 @@ std::string AnimationLoader::framePath(const std::string& dir, int index) const 
 
 int AnimationLoader::maxFrameIndexInDir(const std::string& dir) const {
     if (!fs::exists(dir)) {
+        ROS_DEBUG("Directory does not exist: %s", dir.c_str());
         return -1;
     }
     int max_index = -1;
@@ -119,66 +148,11 @@ int AnimationLoader::maxFrameIndexInDir(const std::string& dir) const {
             if (idx > max_index) {
                 max_index = idx;
             }
-        } catch (...) {
+        } catch (const std::exception& e) {
+            ROS_WARN("Failed to parse frame index from '%s': %s", stem.c_str(), e.what());
         }
     }
     return max_index;
-}
-
-bool AnimationLoader::loadPointsIfExists(
-    const std::string& path,
-    std::vector<linemapdraft_builder::data_types::Point>& points) {
-    if (!fs::exists(path)) {
-        return false;
-    }
-    return linemapdraft_builder::io::load_points(path, points);
-}
-
-bool AnimationLoader::loadPolylinesIfExists(
-    const std::string& path,
-    std::vector<std::vector<linemapdraft_builder::data_types::Point>>& polylines) {
-    if (!fs::exists(path)) {
-        return false;
-    }
-    return linemapdraft_builder::io::load_polylines(path, polylines);
-}
-
-void AnimationLoader::publishPointCloud(
-    const std::vector<linemapdraft_builder::data_types::Point>& points,
-    ros::Publisher& pub) {
-    if (points.empty()) {
-        return;
-    }
-
-    sensor_msgs::PointCloud2 msg;
-    msg.header.stamp = ros::Time::now();
-    msg.header.frame_id = frame_id_;
-
-    sensor_msgs::PointCloud2Modifier modifier(msg);
-    modifier.setPointCloud2Fields(4,
-                                  "x", 1, sensor_msgs::PointField::FLOAT32,
-                                  "y", 1, sensor_msgs::PointField::FLOAT32,
-                                  "z", 1, sensor_msgs::PointField::FLOAT32,
-                                  "intensity", 1, sensor_msgs::PointField::FLOAT32);
-    modifier.resize(points.size());
-
-    sensor_msgs::PointCloud2Iterator<float> out_x(msg, "x");
-    sensor_msgs::PointCloud2Iterator<float> out_y(msg, "y");
-    sensor_msgs::PointCloud2Iterator<float> out_z(msg, "z");
-    sensor_msgs::PointCloud2Iterator<float> out_i(msg, "intensity");
-
-    for (const auto& p : points) {
-        *out_x = p.x - offset_.x;
-        *out_y = p.y - offset_.y;
-        *out_z = p.z;
-        *out_i = p.yaw;
-        ++out_x;
-        ++out_y;
-        ++out_z;
-        ++out_i;
-    }
-
-    pub.publish(msg);
 }
 
 void AnimationLoader::publishPolylines(
@@ -268,24 +242,24 @@ void AnimationLoader::publishFrame(int frame_index) {
     const std::string merged_path = framePath(merged_polylines_dir_, frame_index);
 
     if (publish_frame_points_) {
-        bool loaded = loadPointsIfExists(frame_path, frame_points);
+        bool loaded = LoadPointsIfExists(frame_path, frame_points);
         if (!loaded && !use_pred_frames_) {
-            loaded = loadPointsIfExists(framePath(pred_frames_dir_, frame_index), frame_points);
+            loaded = LoadPointsIfExists(framePath(pred_frames_dir_, frame_index), frame_points);
         }
         if (loaded) {
             MaybeInitOffsetFromPoints(offset_, frame_points);
-            publishPointCloud(frame_points, frame_pub_);
+            PublishPointCloud(frame_points, offset_, frame_id_, frame_pub_);
         }
     }
-    if (publish_voxels_ && loadPointsIfExists(voxel_path, voxel_points)) {
+    if (publish_voxels_ && LoadPointsIfExists(voxel_path, voxel_points)) {
         MaybeInitOffsetFromPoints(offset_, voxel_points);
-        publishPointCloud(voxel_points, voxel_pub_);
+        PublishPointCloud(voxel_points, offset_, frame_id_, voxel_pub_);
     }
-    if (publish_polylines_ && loadPolylinesIfExists(polyline_path, polylines)) {
+    if (publish_polylines_ && LoadPolylinesIfExists(polyline_path, polylines)) {
         MaybeInitOffsetFromPolylines(offset_, polylines);
         publishPolylines(polylines, polyline_pub_, "polylines", 0.0f, 1.0f, 0.0f);
     }
-    if (publish_merged_polylines_ && loadPolylinesIfExists(merged_path, merged_polylines)) {
+    if (publish_merged_polylines_ && LoadPolylinesIfExists(merged_path, merged_polylines)) {
         MaybeInitOffsetFromPolylines(offset_, merged_polylines);
         publishPolylines(merged_polylines, merged_polyline_pub_, "merged_polylines", 1.0f, 0.2f, 0.2f);
     }
