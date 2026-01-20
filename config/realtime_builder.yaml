@@ -1,6 +1,6 @@
 package_name: "realtime_line_generator"
-file_idx: 1
-file_name: 1
+file_idx: 2 # 자주 변경하는 곳
+file_name: 2 # 자주 변경하는 곳
 input_topic: "/points_raw"
 input_folder: "data/issue/global_maps/"
 output_folder: "data/issue/converted_bin/"
@@ -11,8 +11,9 @@ frame_id: "map"
 sensor_frame: "pandar64_0" # pandar64_0 or pandar64_1
 vehicle_frame: "pcra"
 pred_folder: "model_output/" # issue_laneline_pred_nms or model_output
-coordinate_converter_version: 2
+coordinate_converter_version: 2 # 자주 변경하는 곳
 
+# 기존 분들이 하시던 알고리즘을 그대로 implement함.
 voxel_size: 0.5
 yaw_voxel_num: 1
 min_density_threshold: 5
