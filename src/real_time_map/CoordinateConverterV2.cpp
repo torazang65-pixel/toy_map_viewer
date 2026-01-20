@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <set>
+#include <algorithm>
 
 #include "common/io.h"
 
@@ -51,7 +53,6 @@ CoordinateConverterV2::CoordinateConverterV2()
       global_pcd_map_(new pcl::PointCloud<pcl::PointXYZI>),
       global_bin_map_(new pcl::PointCloud<pcl::PointXYZI>) {
     nh_.param<int>("file_idx", file_idx_, 20000);
-    nh_.param<std::string>("sensor_frame", sensor_frame_id_, "pandar64_1");
     nh_.param<std::string>("vehicle_frame", vehicle_frame_id_, "pcra");
     nh_.param<std::string>("pred_folder", pred_folder_, "model_output/");
     std::string output_folder = "data/issue/converted_bin/";
@@ -63,7 +64,9 @@ CoordinateConverterV2::CoordinateConverterV2()
     std::string pkg_path = ros::package::getPath("realtime_line_generator");
     base_dir_ = pkg_path + "/data/";
     sensor_dir_ = base_dir_ + "sensor/" + std::to_string(file_idx_) + "/";
-    sensor_frame_dir_ = sensor_dir_ + sensor_frame_id_ + "/";
+
+    sensor_frame_ids = {"pandar64_0", "pandar64_1"};
+    
     output_dir_ = pkg_path + "/" + output_folder + std::to_string(file_idx_) + "/";
     pred_frames_dir_ = output_dir_ + "pred_frames/";
     frame_id_file_ = sensor_dir_ + "zone_info";
@@ -103,23 +106,21 @@ geometry_msgs::Point CoordinateConverterV2::LLH2ECEF(const geometry_msgs::Point&
     return xyz;
 }
 
-std::string CoordinateConverterV2::getJsonPath(int frame_index) {
-    return sensor_frame_dir_ + "global_pose/" + std::to_string(frame_index) + ".json";
-}
+bool CoordinateConverterV2::processSingleSensor(const std::string& sensor_id, int frame_idx, 
+                                               std::vector<ldb::data_types::Point>& out_points) {
+    // 1. 경로 설정 (센서별 고유 경로)
+    std::string sensor_folder = sensor_dir_ + sensor_id + "/";
+    std::string json_path = sensor_folder + "global_pose/" + std::to_string(frame_idx) + ".json";
+    std::string pcd_path = sensor_folder + "pcd/" + std::to_string(frame_idx) + ".pcd"; // 필요 시
+    std::string bin_path = base_dir_ + pred_folder_ + std::to_string(file_idx_) + "/" + sensor_id + "/" + std::to_string(frame_idx) + ".bin";
 
-std::string CoordinateConverterV2::getPcdPath(int frame_index) {
-    return sensor_frame_dir_ + "pcd/" + std::to_string(frame_index) + ".pcd";
-}
+    if (frame_idx % 100 == 0) { // 너무 많이 나오지 않게 100프레임마다 출력
+        ROS_INFO("Checking bin_path: %s", bin_path.c_str());
+        if (!fs::exists(bin_path)) {
+            ROS_ERROR("File does NOT exist: %s", bin_path.c_str());
+        }
+    }
 
-std::string CoordinateConverterV2::getBinPath(int file_idx, int frame_index) {
-    return base_dir_ + pred_folder_ + std::to_string(file_idx) + "/" + sensor_frame_id_ + "/" +
-           std::to_string(frame_index) + ".bin";
-}
-
-bool CoordinateConverterV2::processFrame(int file_idx, int frame_index) {
-    std::string json_path = getJsonPath(frame_index);
-    std::string pcd_path = getPcdPath(frame_index);
-    std::string bin_path = getBinPath(file_idx, frame_index);
 
     std::ifstream j_file(json_path);
     if (!j_file.is_open()) return false;
@@ -128,14 +129,14 @@ bool CoordinateConverterV2::processFrame(int file_idx, int frame_index) {
     try {
         j_file >> global_pose;
     } catch (...) {
-        ROS_ERROR("JSON Parse Error at index %d", frame_index);
+        ROS_ERROR("JSON Parse Error at index %d", frame_idx);
         return false;
     }
 
     Eigen::Matrix4f T_final;
     try {
         geometry_msgs::TransformStamped tf_s2v_msg =
-            tf_buffer_.lookupTransform(vehicle_frame_id_, sensor_frame_id_, ros::Time(0), ros::Duration(1.0));
+            tf_buffer_.lookupTransform(vehicle_frame_id_, sensor_id, ros::Time(0), ros::Duration(1.0));
         Eigen::Matrix4f T_s2v = tf2::transformToEigen(tf_s2v_msg).matrix().cast<float>();
 
         Eigen::Matrix4d T_v2w = Eigen::Matrix4d::Identity();
@@ -172,7 +173,7 @@ bool CoordinateConverterV2::processFrame(int file_idx, int frame_index) {
         Eigen::Matrix4f T_v2z = (T_w2z * T_v2w).cast<float>();
         T_final = T_v2z * T_s2v;
     } catch (tf2::TransformException &ex) {
-        ROS_WARN("TF Error at frame %d: %s", frame_index, ex.what());
+        ROS_WARN("TF Error at frame %d: %s", frame_idx, ex.what());
         return false;
     }
 
@@ -192,15 +193,13 @@ bool CoordinateConverterV2::processFrame(int file_idx, int frame_index) {
         *global_pcd_map_ += *transformed;
     }
 
-    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_bin(new pcl::PointCloud<pcl::PointXYZI>);
     std::ifstream ifs(bin_path, std::ios::binary);
     if (ifs.is_open()) {
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_bin(new pcl::PointCloud<pcl::PointXYZI>);
         float buffer[4];
         while (ifs.read(reinterpret_cast<char*>(buffer), sizeof(float) * 4)) {
             pcl::PointXYZI pt;
-            pt.x = buffer[0];
-            pt.y = buffer[1];
-            pt.z = buffer[2];
+            pt.x = buffer[0]; pt.y = buffer[1]; pt.z = buffer[2];
             float theta = buffer[3];
             while (theta < 0) theta += 2 * M_PI;
             while (theta >= M_PI) theta -= M_PI;
@@ -208,6 +207,7 @@ bool CoordinateConverterV2::processFrame(int file_idx, int frame_index) {
             cloud_bin->push_back(pt);
         }
         ifs.close();
+
         if (!cloud_bin->empty()) {
             Eigen::Matrix3f rotation = T_final.block<3, 3>(0, 0);
             float yaw_offset = std::atan2(rotation(1, 0), rotation(0, 0));
@@ -217,32 +217,29 @@ bool CoordinateConverterV2::processFrame(int file_idx, int frame_index) {
             for (auto& pt : transformed->points) {
                 pt.intensity = std::fmod(pt.intensity + yaw_offset + M_PI, 2 * M_PI) - M_PI;
             }
-            *global_bin_map_ += *transformed;
 
-            std::string frame_filename =
-                pred_frames_dir_ + "frame_" + std::to_string(frame_index) + ".bin";
-            auto ldb_points = toLdbPoints(transformed);
-            if (ldb::io::write_points(frame_filename, ldb_points)) {
-                pred_frames_saved_++;
-                pred_frame_points_saved_ += ldb_points.size();
-            }
+            *global_bin_map_ += *transformed;
+            out_points = toLdbPoints(transformed);
         }
     }
 
-    Eigen::Vector4f sensor_pos_in_sensor_frame(0.0f, 0.0f, 0.0f, 1.0f);
-    Eigen::Vector4f sensor_pos_in_target_frame = T_final * sensor_pos_in_sensor_frame;
+    
+    if (sensor_id == sensor_frame_ids[0]) {
+        Eigen::Vector4f sensor_pos_in_sensor_frame(0.0f, 0.0f, 0.0f, 1.0f);
+        Eigen::Vector4f sensor_pos_in_target_frame = T_final * sensor_pos_in_sensor_frame;
 
-    Eigen::Quaternionf q_transformed(T_final.block<3, 3>(0, 0));
-    Eigen::Vector3f euler = q_transformed.toRotationMatrix().eulerAngles(0, 1, 2);
+        Eigen::Quaternionf q_transformed(T_final.block<3, 3>(0, 0));
+        Eigen::Vector3f euler = q_transformed.toRotationMatrix().eulerAngles(0, 1, 2);
 
-    Point6D sensor_pose;
-    sensor_pose.x = sensor_pos_in_target_frame(0);
-    sensor_pose.y = sensor_pos_in_target_frame(1);
-    sensor_pose.z = sensor_pos_in_target_frame(2);
-    sensor_pose.dx = euler(0);
-    sensor_pose.dy = euler(1);
-    sensor_pose.dz = euler(2);
-    vehicle_trajectory_.push_back(sensor_pose);
+        Point6D sensor_pose;
+        sensor_pose.x = sensor_pos_in_target_frame(0);
+        sensor_pose.y = sensor_pos_in_target_frame(1);
+        sensor_pose.z = sensor_pos_in_target_frame(2);
+        sensor_pose.dx = euler(0);
+        sensor_pose.dy = euler(1);
+        sensor_pose.dz = euler(2);
+        vehicle_trajectory_.push_back(sensor_pose);
+    }
 
     return true;
 }
@@ -300,34 +297,55 @@ void CoordinateConverterV2::saveVehicleTrajectory() {
 }
 
 void CoordinateConverterV2::run() {
-    std::string global_pose_dir = sensor_frame_dir_ + "global_pose/";
-    if (!fs::exists(global_pose_dir)) {
-        ROS_ERROR("Directory not found: %s", global_pose_dir.c_str());
-        return;
-    }
+    
+    // 모든 센서의 프레임 번호를 합쳐서 중복 제거된 목록 만들기
+    std::set<int> frame_indices;
+    
+    for (const auto& sensor_id : sensor_frame_ids) {
+        std::string pose_dir = sensor_dir_ + sensor_id + "/global_pose/";
+        if (!fs::exists(pose_dir)) continue;
 
-    std::vector<int> frame_indices;
-    for (const auto& entry : fs::directory_iterator(global_pose_dir)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".json") {
-            try {
-                frame_indices.push_back(std::stoi(entry.path().stem().string()));
-            } catch (...) {}
+        for (const auto& entry : fs::directory_iterator(pose_dir)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".json") {
+                try {
+                    // std::set은 insert를 사용하며, 중복된 번호는 알아서 하나만 남깁니다.
+                    frame_indices.insert(std::stoi(entry.path().stem().string()));
+                } catch (...) {
+                    continue; 
+                }
+            }
         }
     }
-    std::sort(frame_indices.begin(), frame_indices.end());
 
     if (frame_indices.empty()) {
-        ROS_WARN("No frames found.");
+        ROS_WARN("No frames found to process.");
         return;
     }
-
-    ROS_INFO(">>> Starting processing %lu frames...", frame_indices.size());
-
-    int success_count = 0;
+    ROS_INFO(">>> Starting processing %lu unique frames...", frame_indices.size());
+    
     for (int idx : frame_indices) {
-        if (processFrame(file_idx_, idx)) {
-            success_count++;
-            if (success_count % 50 == 0) ROS_INFO("Processed frame: %d", idx);
+        std::vector<ldb::data_types::Point> combined_points;
+
+        for (const auto& sensor_id : sensor_frame_ids) {
+            std::vector<ldb::data_types::Point> sensor_points;
+            if (processSingleSensor(sensor_id, idx, sensor_points)) {
+                // 각 센서의 결과 데이터를 하나로 병합
+                combined_points.insert(combined_points.end(), sensor_points.begin(), sensor_points.end());
+            }
+        }
+
+        // 4. 합쳐진 데이터를 해당 프레임 파일로 한 번만 저장
+        if (!combined_points.empty()) {
+            std::string save_path = pred_frames_dir_ + "frame_" + std::to_string(idx) + ".bin";
+            if (ldb::io::write_points(save_path, combined_points)) {
+                // [수정] 성공 시 카운트 증가 로직 추가
+                pred_frames_saved_++;
+                pred_frame_points_saved_ += combined_points.size();
+            }
+        }
+
+        if (idx % 50 == 0) {
+            ROS_INFO("Merged and saved frame: %d", idx);
         }
     }
 

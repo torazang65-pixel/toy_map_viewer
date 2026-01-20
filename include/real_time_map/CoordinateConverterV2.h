@@ -19,6 +19,9 @@
 #include <nlohmann/json.hpp>
 
 #include "common/DataTypes.h"
+#include "common/io.h"
+
+namespace ldb = linemapdraft_builder;
 
 class CoordinateConverterV2 {
 public:
@@ -28,17 +31,14 @@ public:
     void run();
 
 private:
-    bool processFrame(int file_idx, int frame_index);
+    bool processSingleSensor(const std::string& sensor_id, int frame_idx, 
+                                               std::vector<ldb::data_types::Point>& out_points);
     void saveGlobalMaps();
     void saveVehicleTrajectory();
     void saveMapToFile(const typename pcl::PointCloud<pcl::PointXYZI>::Ptr& map,
                        const std::string& filename, bool filter_mode);
 
     geometry_msgs::Point LLH2ECEF(const geometry_msgs::Point& llh) const;
-
-    std::string getJsonPath(int frame_index);
-    std::string getPcdPath(int frame_index);
-    std::string getBinPath(int file_idx, int frame_index);
 
 private:
     ros::NodeHandle nh_;
@@ -48,18 +48,20 @@ private:
     pcl::PointCloud<pcl::PointXYZI>::Ptr global_pcd_map_;
     pcl::PointCloud<pcl::PointXYZI>::Ptr global_bin_map_;
 
+    std::vector<std::string> sensor_frame_ids;
+
     std::string base_dir_;
     std::string sensor_dir_;
     std::string sensor_frame_dir_;
     std::string output_dir_;
     std::string pred_frames_dir_;
     std::string pred_folder_;
-    std::string sensor_frame_id_;
     std::string vehicle_frame_id_;
     std::string target_frame_id_;
     std::string frame_id_file_;
     int file_idx_;
     std::vector<Point6D> vehicle_trajectory_;
+
     std::size_t pred_frames_saved_ = 0;
     std::size_t pred_frame_points_saved_ = 0;
 };

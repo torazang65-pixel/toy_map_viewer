@@ -1,6 +1,6 @@
 package_name: "realtime_line_generator"
-file_idx: 0
-file_name: "0"
+file_idx: 3
+file_name: "3"
 input_topic: "/points_raw"
 input_folder: "data/lane_change_data/map_latest/"   # data/issue/global_maps/ or data/lane_change_data/map_latest/
 output_folder: "data/issue/converted_bin/"
@@ -8,7 +8,6 @@ start_frame: 0
 playback_rate: 10.0
 use_pred_frames: true
 frame_id: "map"
-sensor_frame: "pandar64_1" # pandar64_0 or pandar64_1
 vehicle_frame: "pcra"
 pred_folder: "model_output/" # issue_laneline_pred_nms or model_output
 coordinate_converter_version: 2

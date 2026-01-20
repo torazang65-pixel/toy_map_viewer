@@ -26,7 +26,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: voxels
+    SyncSource: PointCloud2
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -155,13 +155,13 @@ Visualization Manager:
       Queue Size: 100
       Value: false
     - Class: rviz/MarkerArray
-      Enabled: false
+      Enabled: true
       Marker Topic: /realtime_viewer_node/merged_polylines
       Name: MarkerArray
       Namespaces:
-        {}
+        merged_polylines: true
       Queue Size: 100
-      Value: false
+      Value: true
     - Class: rviz/MarkerArray
       Enabled: false
       Marker Topic: /realtime_viewer_node/eval/false_negatives
@@ -171,13 +171,13 @@ Visualization Manager:
       Queue Size: 100
       Value: false
     - Class: rviz/Marker
-      Enabled: false
+      Enabled: true
       Marker Topic: /realtime_viewer_node/vehicle_pose
       Name: Marker
       Namespaces:
-        {}
+        vehicle_pose: true
       Queue Size: 100
-      Value: false
+      Value: true
     - Class: rviz/MarkerArray
       Enabled: false
       Marker Topic: /realtime_viewer_node/gt_map
@@ -223,10 +223,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 3.5913729667663574
+      Scale: 0.7604600191116333
       Target Frame: <Fixed Frame>
-      X: 76.2467041015625
-      Y: 261.9308776855469
+      X: -85.51473999023438
+      Y: -380.03900146484375
     Saved: ~
 Window Geometry:
   Displays:
