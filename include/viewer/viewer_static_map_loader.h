@@ -3,6 +3,7 @@
 #include <ros/ros.h>
 
 #include <string>
+#include <map>
 
 #include <viewer/viewer_offset.h>
 
@@ -24,13 +25,13 @@ private:
     OffsetState& offset_;
 
     ros::Publisher map_points_pub_;
-    ros::Publisher converted_map_pub_;
-    ros::Publisher converted_map_raw_pub_;
+    // dynamic publishers for lidar sequences
+    // Key: topic name (e.g., converted_map_filtered, converted_map_seq_2)
+    std::map<std::string, ros::Publisher> lidar_pubs_;
 
     std::string output_folder_;
     std::string output_root_;
     std::string converted_root_;
-    std::string map_points_path_;
     std::string frame_id_;
     int file_idx_ = 0;
     bool publish_map_points_ = true;
