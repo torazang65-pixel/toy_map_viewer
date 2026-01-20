@@ -14,6 +14,8 @@ namespace fs = std::filesystem;
 
 namespace realtime_line_generator::viewer {
 
+namespace ldb = linemapdraft_builder;
+
 AnimationLoader::AnimationLoader(ros::NodeHandle& nh, OffsetState& offset)
     : nh_(nh), offset_(offset) {
     nh_.param<std::string>("output_folder", output_folder_, "data/issue/converted_bin/");
@@ -46,6 +48,17 @@ AnimationLoader::AnimationLoader(ros::NodeHandle& nh, OffsetState& offset)
     polyline_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("detected_polylines", 1);
     merged_polyline_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("merged_polylines", 1);
     vehicle_pose_pub_ = nh_.advertise<visualization_msgs::Marker>("vehicle_pose", 1);
+
+    // 평가 결과 발행 여부 파라미터 (선택 사항)
+    nh_.param("publish_eval", publish_eval_, true);
+
+    // 빌더에서 저장한 경로와 일치하도록 설정
+    eval_fp_dir_ = output_root_ + "eval_fp/fp_";
+    eval_fn_dir_ = output_root_ + "eval_fn/fn_";
+
+    // 마커 퍼블리셔 선언
+    eval_fp_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("eval/false_positives", 1);
+    eval_fn_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("eval/false_negatives", 1);
 
     if (frame_step_ < 1) {
         frame_step_ = 1;
@@ -260,12 +273,15 @@ void AnimationLoader::publishFrame(int frame_index) {
     std::vector<linemapdraft_builder::data_types::Point> voxel_points;
     std::vector<std::vector<linemapdraft_builder::data_types::Point>> polylines;
     std::vector<std::vector<linemapdraft_builder::data_types::Point>> merged_polylines;
+    std::vector<std::vector<ldb::data_types::Point>> fp_lines, fn_lines;
 
     const std::string frame_path =
         framePath(use_pred_frames_ ? pred_frames_dir_ : frames_dir_, frame_index);
     const std::string voxel_path = framePath(voxels_dir_, frame_index);
     const std::string polyline_path = framePath(polylines_dir_, frame_index);
     const std::string merged_path = framePath(merged_polylines_dir_, frame_index);
+    const std::string fp_path = eval_fp_dir_ + std::to_string(frame_index) + ".bin";
+    const std::string fn_path = eval_fn_dir_ + std::to_string(frame_index) + ".bin";
 
     if (publish_frame_points_) {
         bool loaded = loadPointsIfExists(frame_path, frame_points);
@@ -290,6 +306,21 @@ void AnimationLoader::publishFrame(int frame_index) {
         publishPolylines(merged_polylines, merged_polyline_pub_, "merged_polylines", 1.0f, 0.2f, 0.2f);
     }
     publishVehiclePose(frame_index);
+    
+
+    if (publish_eval_) {
+    std::vector<std::vector<ldb::data_types::Point>> fp_lines, fn_lines;
+    
+    // FP(오탐) 로드 및 빨간색 시각화
+    if (loadPolylinesIfExists(fp_path, fp_lines)) {
+        publishPolylines(fp_lines, eval_fp_pub_, "false_positives", 1.0f, 0.0f, 0.0f);
+    }
+    
+    // FN(미탐) 로드 및 파란색 시각화
+    if (loadPolylinesIfExists(fn_path, fn_lines)) {
+        publishPolylines(fn_lines, eval_fn_pub_, "false_negatives", 0.0f, 0.0f, 1.0f);
+    }
+}
 }
 
 }  // namespace realtime_line_generator::viewer

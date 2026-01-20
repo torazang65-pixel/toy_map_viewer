@@ -65,6 +65,12 @@ private:
     bool publish_polylines_ = true;
     bool publish_merged_polylines_ = true;
     bool publish_vehicle_pose_ = true;
+
+    bool publish_eval_;
+    std::string eval_fp_dir_;
+    std::string eval_fn_dir_;
+    ros::Publisher eval_fp_pub_;
+    ros::Publisher eval_fn_pub_;
 };
 
 }  // namespace realtime_line_generator::viewer

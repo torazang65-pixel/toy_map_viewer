@@ -51,7 +51,7 @@ CoordinateConverterV2::CoordinateConverterV2()
       global_pcd_map_(new pcl::PointCloud<pcl::PointXYZI>),
       global_bin_map_(new pcl::PointCloud<pcl::PointXYZI>) {
     nh_.param<int>("file_idx", file_idx_, 20000);
-    nh_.param<std::string>("sensor_frame", sensor_frame_id_, "pandar64_0");
+    nh_.param<std::string>("sensor_frame", sensor_frame_id_, "pandar64_1");
     nh_.param<std::string>("vehicle_frame", vehicle_frame_id_, "pcra");
     nh_.param<std::string>("pred_folder", pred_folder_, "model_output/");
     std::string output_folder = "data/issue/converted_bin/";

@@ -71,6 +71,9 @@ StaticMapLoader::StaticMapLoader(ros::NodeHandle& nh, OffsetState& offset)
     map_points_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("mapconverter_points", 1, true);
     converted_map_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("converted_map_filtered", 1, true);
     converted_map_raw_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("converted_map_raw", 1, true);
+
+    gt_map_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("gt_map", 1, true);
+    gt_path_ = output_root_ + "gt.bin";
 }
 
 void StaticMapLoader::Publish() {
@@ -80,6 +83,14 @@ void StaticMapLoader::Publish() {
         publishPointsByPolylineId(map_points, map_points_pub_, "mapconverter_points", 0.2f);
     }
 
+    // gt.bin 시각화 로직
+    std::vector<std::vector<linemapdraft_builder::data_types::Point>> gt_polylines;
+    if (loadPolylinesIfExists(gt_path_, gt_polylines)) {
+        MaybeInitOffsetFromPolylines(offset_, gt_polylines);
+        // 노란색(1.0, 1.0, 0.0) 선으로 발행
+        publishPolylines(gt_polylines, gt_map_pub_, "gt_map", 1.0f, 1.0f, 0.0f);
+    }
+    
     std::vector<linemapdraft_builder::data_types::Point> converted_points;
     std::string converted_filtered_path = converted_root_ + "lidar_seq_0.bin";
     if (publish_converted_filtered_ && loadPointsIfExists(converted_filtered_path, converted_points)) {
@@ -108,6 +119,46 @@ bool StaticMapLoader::loadPointsIfExists(
         return false;
     }
     return linemapdraft_builder::io::load_points(path, points);
+}
+
+bool StaticMapLoader::loadPolylinesIfExists(
+    const std::string& path,
+    std::vector<std::vector<linemapdraft_builder::data_types::Point>>& polylines) {
+    if (!fs::exists(path)) return false;
+    return linemapdraft_builder::io::load_polylines(path, polylines);
+}
+
+// 선(Line Strip) 형태로 MarkerArray 발행 함수
+void StaticMapLoader::publishPolylines(
+    const std::vector<std::vector<linemapdraft_builder::data_types::Point>>& polylines,
+    ros::Publisher& pub, const std::string& ns, float r, float g, float b) {
+    
+    visualization_msgs::MarkerArray marker_array;
+    visualization_msgs::Marker delete_marker;
+    delete_marker.action = visualization_msgs::Marker::DELETEALL;
+    marker_array.markers.push_back(delete_marker);
+
+    for (size_t i = 0; i < polylines.size(); ++i) {
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = frame_id_;
+        marker.header.stamp = ros::Time::now();
+        marker.ns = ns;
+        marker.id = i;
+        marker.type = visualization_msgs::Marker::LINE_STRIP;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.scale.x = 0.2; // 선 두께
+        marker.color.r = r; marker.color.g = g; marker.color.b = b; marker.color.a = 1.0f;
+
+        for (const auto& p : polylines[i]) {
+            geometry_msgs::Point pt;
+            pt.x = p.x - offset_.x;
+            pt.y = p.y - offset_.y;
+            pt.z = p.z;
+            marker.points.push_back(pt);
+        }
+        marker_array.markers.push_back(marker);
+    }
+    pub.publish(marker_array);
 }
 
 void StaticMapLoader::publishPointCloud(const std::vector<linemapdraft_builder::data_types::Point>& points,

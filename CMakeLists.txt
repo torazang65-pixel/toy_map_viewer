@@ -48,6 +48,12 @@ add_library(${PROJECT_NAME}
   src/viewer/viewer_static_map_loader.cpp
   src/common/io.cpp               
   src/common/data_types.cpp       
+  src/evaluator/polyline_evaluator.cpp
+  src/evaluator/polyline_evaluator_coverage.cpp
+  src/evaluator/realtime_evaluator.cpp
+  src/realtime_line_generator/LaneCleaner.cpp
+  src/realtime_line_generator/LaneMerger.cpp
+  src/realtime_line_generator/LaneUtils.cpp
 )
 
 # 노드 실행 파일명을 realtime_builder_node로 설정

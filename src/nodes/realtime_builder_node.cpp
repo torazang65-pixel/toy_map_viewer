@@ -6,6 +6,7 @@
 #include <realtime_line_generator/realtime_line_builder.h>
 #include <real_time_map/CoordinateConverterV1.h>
 #include <real_time_map/CoordinateConverterV2.h>
+#include <evaluator/realtime_evaluator.h>
 
 #include <cstddef>
 #include <filesystem>
@@ -14,10 +15,12 @@
 #include <vector>
 
 namespace fs = std::filesystem;
+namespace ldb = linemapdraft_builder;
 
 class RealtimeBuilderNode {
+
 public:
-    RealtimeBuilderNode() : nh_("~"), builder_(nh_) {
+    RealtimeBuilderNode() : nh_("~"), builder_(nh_), evaluator_(nh_) {
         nh_.param<std::string>("input_topic", input_topic_, "/points_raw");
         nh_.param<std::string>("output_folder", output_folder_, "data/issue/converted_bin/");
         nh_.param("file_idx", file_idx_, 20000);
@@ -36,6 +39,9 @@ public:
         voxels_dir_ = output_root_ + "voxels/";
         polylines_dir_ = output_root_ + "polylines/";
         merged_polylines_dir_ = output_root_ + "merged_polylines/";
+
+        gt_path_ = output_root_ + "gt.bin";
+        traj_path_ = output_root_ + "vehicle_trajectory.bin";
 
         createDirectories();
 
@@ -118,8 +124,37 @@ public:
             loop_rate.sleep();
         }
 
+        ROS_INFO("Phase 1 Complete. Starting Phase 2: Evaluation...");
+        performEvaluation();
+
         logSaveSummary();
         builder_.logTimingSummary();
+    }
+
+    void performEvaluation() {
+        // 저장된 merged_polylines 폴더를 스캔하여 하나씩 평가
+        if (!evaluator_.init(gt_path_, traj_path_)) {
+            ROS_ERROR("[Evaluator] Failed to load GT or Trajectory files for evaluation!");
+            ROS_ERROR("Path: %s, %s", gt_path_.c_str(), traj_path_.c_str());
+            return;
+        }
+
+        for (int i = frame_index_; i <= end_frame_; ++i) {
+            std::vector<std::vector<ldb::data_types::Point>> polylines;
+            std::string path = merged_polylines_dir_ + "frame_" + std::to_string(i) + ".bin";
+
+            if (ldb::io::load_polylines(path, polylines)) {
+                // 이제 vehicle_trajectory_가 채워져 있으므로 정상 작동합니다.
+                evaluator_.evaluateFrame(i, polylines, frame_id_);
+
+                std::string fp_dir = output_root_ + "eval_fp/";
+                std::string fn_dir = output_root_ + "eval_fn/";
+                evaluator_.saveEvaluationResults(i, fp_dir, fn_dir);
+                
+                if (i % 50 == 0) ROS_INFO("Evaluating... Frame %d/%d", i, end_frame_);
+            }
+        }
+        evaluator_.printFinalSummary();
     }
 
 private:
@@ -136,6 +171,8 @@ private:
         fs::create_directories(voxels_dir_);
         fs::create_directories(polylines_dir_);
         fs::create_directories(merged_polylines_dir_);
+        fs::create_directories(output_root_ + "eval_fp/");
+        fs::create_directories(output_root_ + "eval_fn/");
     }
 
     std::string framePath(const std::string& dir, int index) const {
@@ -243,6 +280,7 @@ private:
 
     ros::NodeHandle nh_;
     realtime_line_generator::RealTimeLineBuilder builder_;
+    realtime_line_generator::RealTimeEvaluator evaluator_;
     ros::Subscriber sub_;
     std::string input_topic_;
     std::string output_folder_;
@@ -252,6 +290,8 @@ private:
     std::string voxels_dir_;
     std::string polylines_dir_;
     std::string merged_polylines_dir_;
+    std::string gt_path_;
+    std::string traj_path_;
     std::string frame_id_;
     int file_idx_;
     int frame_index_;

@@ -1,7 +1,7 @@
 #include <common/data_types.h>
 #include <common/geometry_utils.h>
 #include <common/io.h>
-#include <linemapdraft_builder/polyline_generator.h>
+#include <realtime_line_generator/polyline_generator.h>
 #include <ros/package.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
