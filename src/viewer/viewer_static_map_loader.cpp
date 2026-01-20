@@ -14,8 +14,8 @@
 namespace realtime_line_generator::viewer {
 
 namespace {
-uint32_t HashId(int id) {
-    uint32_t x = static_cast<uint32_t>(id);
+uint32_t HashId(uint32_t id) {
+    uint32_t x = id;
     x = x * 2654435761u;
     x = ((x >> 16) ^ x) * 0x45d9f3bu;
     x = ((x >> 16) ^ x) * 0x45d9f3bu;
@@ -43,8 +43,9 @@ std::array<float, 3> HsvToRgb(float h, float s, float v) {
     }
 }
 
-std::array<float, 3> ColorForId(int id) {
-    uint32_t hashed_id = HashId(id);
+std::array<float, 3> ColorForId(int id, int seq_idx) {
+    uint32_t seed = static_cast<uint32_t>(id) ^ (static_cast<uint32_t>(seq_idx) * 0x9e3779b9u);
+    uint32_t hashed_id = HashId(seed);
     float hue = std::fmod(static_cast<float>(hashed_id) * 0.61803398875f, 1.0f);
     return HsvToRgb(hue, 0.85f, 0.95f);
 }
@@ -66,10 +67,7 @@ StaticMapLoader::StaticMapLoader(ros::NodeHandle& nh, OffsetState& offset)
     output_root_ = pkg_path + "/" + output_folder_ + std::to_string(file_idx_) + "/";
     converted_root_ = output_root_;
 
-    // map_points_pub_ is fixed
-    map_points_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("mapconverter_points", 1, true);
-
-    // Dynamic publishers will be created on demand in Publish() to avoid scanning twice
+    // Dynamic publishers will be created on demand in Publish()
 }
 
 void StaticMapLoader::Publish() {
@@ -77,9 +75,6 @@ void StaticMapLoader::Publish() {
         ROS_WARN("Output directory does not exist: %s", converted_root_.c_str());
         return;
     }
-
-    std::vector<linemapdraft_builder::data_types::Point> all_map_points;
-    bool found_map_points = false;
 
     // Regex for matching files
     std::regex points_seq_regex(R"(points_seq_(\d+)\.bin)");
@@ -94,29 +89,30 @@ void StaticMapLoader::Publish() {
 
         // 1. Process points_seq_X.bin
         if (std::regex_match(filename, match, points_seq_regex)) {
-            if (publish_map_points_) {
-                std::vector<linemapdraft_builder::data_types::Point> pts;
-                if (LoadPointsIfExists(full_path, pts)) {
-                    all_map_points.insert(all_map_points.end(), pts.begin(), pts.end());
-                    found_map_points = true;
-                }
+            if (!publish_map_points_) {
+                continue;
+            }
+            int seq_idx = std::stoi(match[1].str());
+            std::string topic_name = "points_seq_" + std::to_string(seq_idx);
+
+            if (points_pubs_.find(topic_name) == points_pubs_.end()) {
+                points_pubs_[topic_name] =
+                    nh_.advertise<visualization_msgs::MarkerArray>(topic_name, 1, true);
+            }
+
+            std::vector<linemapdraft_builder::data_types::Point> pts;
+            if (LoadPointsIfExists(full_path, pts)) {
+                MaybeInitOffsetFromPoints(offset_, pts);
+                publishPointsByPolylineId(pts, points_pubs_[topic_name], topic_name, 0.2f, seq_idx);
             }
         }
         // 2. Process lidar_seq_X.bin
         else if (std::regex_match(filename, match, lidar_seq_regex)) {
             int seq_idx = std::stoi(match[1].str());
-            std::string topic_name;
-
-            // Determine topic name based on sequence index (Legacy support)
-            if (seq_idx == 0) {
-                if (!publish_converted_filtered_) continue;
-                topic_name = "converted_map_filtered";
-            } else if (seq_idx == 1) {
-                if (!publish_converted_raw_) continue;
-                topic_name = "converted_map_raw";
-            } else {
-                topic_name = "converted_map_seq_" + std::to_string(seq_idx);
-            }
+            // Keep legacy toggles for seq 0/1.
+            if (seq_idx == 0 && !publish_converted_filtered_) continue;
+            if (seq_idx == 1 && !publish_converted_raw_) continue;
+            std::string topic_name = "lidar_seq_" + std::to_string(seq_idx);
 
             // Create publisher if not exists
             if (lidar_pubs_.find(topic_name) == lidar_pubs_.end()) {
@@ -131,18 +127,14 @@ void StaticMapLoader::Publish() {
         }
     }
 
-    // Publish amassed map points
-    if (publish_map_points_ && found_map_points) {
-        MaybeInitOffsetFromPoints(offset_, all_map_points);
-        publishPointsByPolylineId(all_map_points, map_points_pub_, "mapconverter_points", 0.2f);
-    }
 }
 
 void StaticMapLoader::publishPointsByPolylineId(
     const std::vector<linemapdraft_builder::data_types::Point>& points,
     ros::Publisher& pub,
     const std::string& ns,
-    float scale) {
+    float scale,
+    int seq_idx) {
     if (points.empty()) {
         return;
     }
@@ -167,7 +159,7 @@ void StaticMapLoader::publishPointsByPolylineId(
     for (const auto& [id, pts] : grouped) {
         if (pts.empty()) continue;
 
-        auto [r, g, b] = ColorForId(id);
+        auto [r, g, b] = ColorForId(id, seq_idx);
         visualization_msgs::Marker marker;
         marker.header.frame_id = frame_id_;
         marker.header.stamp = ros::Time::now();
