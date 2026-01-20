@@ -1,4 +1,4 @@
-#include "realtime_line_generator/MapConverterV2.h"
+#include "realtime_line_generator/MapConverterV1.h"
 #include "common/io.h"
 
 #include <fstream>
@@ -10,50 +10,35 @@
 using json = nlohmann::json;
 namespace ldb = linemapdraft_builder;
 
-MapConverterV2::MapConverterV2() : nh_("~") {
+MapConverterV1::MapConverterV1() : nh_("~") {
     loadParameters();
 }
 
-void MapConverterV2::loadParameters() {
+void MapConverterV1::loadParameters() {
     nh_.param<std::string>("package_name", package_name_, "realtime_line_generator");
     nh_.param<int>("file_idx", lane_config_.file_idx, 0);
-    // Base input folder containing map_prev and map_latest directories
-    nh_.param<std::string>("input_folder", base_input_dir_, "data/issue/");
-    nh_.param<std::string>("output_folder", output_root_dir_, "data/issue/converted_bin/");
+    nh_.param<std::string>("input_folder", input_folder_name_, "data/issue/global_maps/");
+    nh_.param<std::string>("output_folder", output_folder_name_, "data/issue/converted_bin/");
 
     std::string pkg_path = ros::package::getPath(package_name_);
-    // Ensure trailing slash
-    if (base_input_dir_.back() != '/') base_input_dir_ += "/";
-    if (output_root_dir_.back() != '/') output_root_dir_ += "/";
-
-    base_input_dir_ = pkg_path + "/" + base_input_dir_;
-    output_root_dir_ = pkg_path + "/" + output_root_dir_ + std::to_string(lane_config_.file_idx) + "/";
+    base_dir_ = pkg_path + "/" + input_folder_name_;
+    output_dir_ = pkg_path + "/" + output_folder_name_ + std::to_string(lane_config_.file_idx) + "/";
 
     struct stat st = {0};
-    if (stat(output_root_dir_.c_str(), &st) == -1) {
-        std::string cmd = "mkdir -p " + output_root_dir_;
+    if (stat(output_dir_.c_str(), &st) == -1) {
+        std::string cmd = "mkdir -p " + output_dir_;
         system(cmd.c_str());
     }
 }
 
-void MapConverterV2::run() {
-    // Process Previous Map (map_prev -> points_seq_0.bin)
-    processMap("map_prev/", "points_seq_0.bin");
-    
-    // Process Latest Map (map_latest -> points_seq_1.bin)
-    processMap("map_latest/", "points_seq_1.bin");
-}
-
-void MapConverterV2::processMap(const std::string& input_subdir, const std::string& output_filename) {
-    global_map_.clear(); // Clear for fresh processing
-    
+void MapConverterV1::run() {
     int current_idx = lane_config_.file_idx;
     std::string filename = std::to_string(current_idx) + ".json";
-    std::string file_path = base_input_dir_ + input_subdir + filename;
+    std::string file_path = base_dir_ + filename;
 
     std::ifstream f(file_path);
     if (!f.is_open()) {
-        ROS_WARN("[MapConverterV2] Failed to open file: %s", file_path.c_str());
+        ROS_ERROR("Failed to open file: %s", file_path.c_str());
         return;
     }
 
@@ -101,7 +86,7 @@ void MapConverterV2::processMap(const std::string& input_subdir, const std::stri
             global_map_[id].points.push_back(pt);
         }
     } catch (const std::exception& e) {
-        ROS_ERROR("[MapConverterV2] JSON parsing error in %s: %s", file_path.c_str(), e.what());
+        ROS_ERROR("JSON parsing error: %s", e.what());
         return;
     }
 
@@ -126,7 +111,7 @@ void MapConverterV2::processMap(const std::string& input_subdir, const std::stri
         polylines.push_back(std::move(polyline));
     }
 
-    const std::string output_path = output_root_dir_ + output_filename;
+    const std::string output_path = output_dir_ + "points_seq_0.bin";
     ldb::io::write_points_from_polylines(output_path, polylines);
-    ROS_INFO("[MapConverterV2] Saved %s (%lu lanes).", output_filename.c_str(), polylines.size());
+    ROS_INFO("Saved points_seq_0.bin (%lu lanes).", polylines.size());
 }
