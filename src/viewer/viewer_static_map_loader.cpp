@@ -7,6 +7,8 @@
 
 #include <array>
 #include <cmath>
+#include <filesystem>
+#include <regex>
 #include <unordered_map>
 
 namespace realtime_line_generator::viewer {
@@ -47,9 +49,6 @@ std::array<float, 3> ColorForId(int id) {
     return HsvToRgb(hue, 0.85f, 0.95f);
 }
 }  // namespace
-
-#include <filesystem>
-#include <regex>
 
 namespace fs = std::filesystem;
 
