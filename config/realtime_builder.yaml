@@ -11,7 +11,8 @@ frame_id: "map"
 sensor_frame: "pandar64_0" # pandar64_0 or pandar64_1
 vehicle_frame: "pcra"
 pred_folder: "model_output/" # issue_laneline_pred_nms or model_output
-coordinate_converter_version: 2 # 자주 변경하는 곳
+map_converter_version: 2 # 1. global_maps, 2. prev & latest
+coordinate_converter_version: 2 # 1. global_maps, 2. prev & latest
 
 # 기존 분들이 하시던 알고리즘을 그대로 implement함.
 voxel_size: 0.5
