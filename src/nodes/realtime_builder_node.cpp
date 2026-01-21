@@ -26,8 +26,14 @@ public:
         nh_.param("playback_rate", playback_rate_, 10.0);
         nh_.param("use_pred_frames", use_pred_frames_, false);
         nh_.param<std::string>("frame_id", frame_id_, "map");
-        nh_.param("coordinate_converter_version", coordinate_converter_version_, 2);
-        nh_.param<int>("map_converter_version", map_converter_version_, 1);
+        int pipeline_version = 0;
+        if (nh_.getParam("pipeline_version", pipeline_version)) {
+            map_converter_version_ = pipeline_version;
+            coordinate_converter_version_ = pipeline_version;
+        } else {
+            nh_.param("coordinate_converter_version", coordinate_converter_version_, 2);
+            nh_.param<int>("map_converter_version", map_converter_version_, 1);
+        }
 
         std::string pkg_path = ros::package::getPath("realtime_line_generator");
         normalizeFolder(output_folder_);

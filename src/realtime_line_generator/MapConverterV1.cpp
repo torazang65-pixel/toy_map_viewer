@@ -1,11 +1,13 @@
 #include "realtime_line_generator/MapConverterV1.h"
 #include "common/io.h"
 
+#include <filesystem>
 #include <fstream>
 #include <set>
 #include <utility>
-#include <sys/stat.h>
 #include <nlohmann/json.hpp>
+
+namespace fs = std::filesystem;
 
 using json = nlohmann::json;
 namespace ldb = linemapdraft_builder;
@@ -24,11 +26,11 @@ void MapConverterV1::loadParameters() {
     base_dir_ = pkg_path + "/" + input_folder_name_;
     output_dir_ = pkg_path + "/" + output_folder_name_ + std::to_string(lane_config_.file_idx) + "/";
 
-    struct stat st = {0};
-    if (stat(output_dir_.c_str(), &st) == -1) {
-        std::string cmd = "mkdir -p " + output_dir_;
-        system(cmd.c_str());
+    if (fs::exists(output_dir_)) {
+        fs::remove_all(output_dir_);
+        ROS_INFO("[MapConverterV1] Cleared existing directory: %s", output_dir_.c_str());
     }
+    fs::create_directories(output_dir_);
 }
 
 void MapConverterV1::run() {
