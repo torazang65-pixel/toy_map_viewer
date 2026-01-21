@@ -1,4 +1,4 @@
-#include "realtime_line_generator/MapConverterV1.h"
+#include "gt_generator/MapConverterV1.h"
 #include "common/io.h"
 
 #include <filesystem>
@@ -11,6 +11,9 @@ namespace fs = std::filesystem;
 
 using json = nlohmann::json;
 namespace ldb = linemapdraft_builder;
+
+using linemapdraft_builder::data_types::Lane;
+using linemapdraft_builder::data_types::Point6D;
 
 MapConverterV1::MapConverterV1() : nh_("~") {
     loadParameters();

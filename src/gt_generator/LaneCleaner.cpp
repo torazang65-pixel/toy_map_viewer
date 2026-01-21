@@ -6,8 +6,11 @@
 #include <set>
 #include <cmath>
 #include <algorithm> // std::max, std::min
-#include "common/DataTypes.h"
-#include "realtime_line_generator/LaneUtils.h" // CalculateLaneLength 사용
+#include <common/data_types.h>
+#include "gt_generator/LaneUtils.h" // CalculateLaneLength 사용
+
+using linemapdraft_builder::data_types::Lane;
+using linemapdraft_builder::data_types::Point6D;
 
 namespace LaneCleaner {
     struct PointSourceInfo {

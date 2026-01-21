@@ -5,7 +5,7 @@
 #include <map>
 #include <string>
 
-#include "common/DataTypes.h"
+#include <common/data_types.h>
 #include "LaneUtils.h"
 
 class MapConverterV1 {
@@ -27,5 +27,5 @@ private:
     std::string base_dir_;
     std::string output_dir_;
 
-    std::map<int, Lane> global_map_;
+    std::map<int, linemapdraft_builder::data_types::Lane> global_map_;
 };

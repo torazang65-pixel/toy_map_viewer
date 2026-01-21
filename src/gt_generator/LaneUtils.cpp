@@ -1,5 +1,5 @@
 // LaneUtils.cpp
-#include "realtime_line_generator/LaneUtils.h"
+#include "gt_generator/LaneUtils.h"
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -12,6 +12,9 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/kdtree/kdtree_flann.h>
+
+using linemapdraft_builder::data_types::Lane;
+using linemapdraft_builder::data_types::Point6D;
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846

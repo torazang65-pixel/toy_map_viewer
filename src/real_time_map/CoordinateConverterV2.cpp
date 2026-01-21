@@ -14,6 +14,8 @@ namespace fs = std::filesystem;
 using json = nlohmann::json;
 namespace ldb = linemapdraft_builder;
 
+using linemapdraft_builder::data_types::Point6D;
+
 struct PointXYZU {
     PCL_ADD_POINT4D;
     std::uint8_t intensity;

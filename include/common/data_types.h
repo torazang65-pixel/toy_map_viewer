@@ -3,10 +3,28 @@
 #include <boost/geometry.hpp>
 #include <boost/geometry/index/rtree.hpp>
 #include <cmath>
+#include <cstdint>
 #include <map>
 #include <utility>
 #include <vector>
+
 namespace linemapdraft_builder::data_types {
+
+// gt 생성용 새로운 struct 정의.
+struct Point6D {
+  double x, y, z;
+  double dx, dy, dz;
+};
+
+struct Lane {
+  int id;
+  int type;
+  bool valid;
+  bool explicit_lane;
+  std::vector<Point6D> points;
+};
+
+// original linemapdraft_builder start here
 constexpr int full_seq_size = 0;  // default value for full sequence size
 
 namespace bg = boost::geometry;

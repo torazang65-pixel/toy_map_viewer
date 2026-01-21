@@ -1,4 +1,4 @@
-#include "realtime_line_generator/MapConverterV2.h"
+#include "gt_generator/MapConverterV2.h"
 #include "common/io.h"
 
 #include <filesystem>
@@ -10,12 +10,15 @@
 namespace fs = std::filesystem;
 #include <algorithm> // std::sort 사용
 #include <cmath>     // std::hypot 사용
-#include "realtime_line_generator/LaneUtils.h"
-#include "realtime_line_generator/LaneCleaner.h"
-#include "realtime_line_generator/LaneMerger.h"
+#include "gt_generator/LaneUtils.h"
+#include "gt_generator/LaneCleaner.h"
+#include "gt_generator/LaneMerger.h"
 
 using json = nlohmann::json;
 namespace ldb = linemapdraft_builder;
+
+using linemapdraft_builder::data_types::Lane;
+using linemapdraft_builder::data_types::Point6D;
 
 MapConverterV2::MapConverterV2() : nh_("~") {
     loadParameters();

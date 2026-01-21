@@ -34,11 +34,11 @@ add_definitions(${PCL_DEFINITIONS})
 
 # 실행 파일 생성
 add_library(${PROJECT_NAME}
-  src/realtime_line_generator/MapConverterV1.cpp
-  src/realtime_line_generator/MapConverterV2.cpp
+  src/gt_generator/MapConverterV1.cpp
+  src/gt_generator/MapConverterV2.cpp
   src/real_time_map/CoordinateConverterV1.cpp
   src/real_time_map/CoordinateConverterV2.cpp
-  src/realtime_line_generator/LaneUtils.cpp
+  src/gt_generator/LaneUtils.cpp
   src/realtime_line_generator/realtime_voxel_manager.cpp
   src/realtime_line_generator/realtime_line_builder.cpp
   src/real_time_map/FrameLoader.cpp
@@ -52,9 +52,9 @@ add_library(${PROJECT_NAME}
   src/evaluator/polyline_evaluator.cpp
   src/evaluator/polyline_evaluator_coverage.cpp
   src/evaluator/realtime_evaluator.cpp
-  src/realtime_line_generator/LaneCleaner.cpp
-  src/realtime_line_generator/LaneMerger.cpp
-  src/realtime_line_generator/LaneUtils.cpp
+  src/gt_generator/LaneCleaner.cpp
+  src/gt_generator/LaneMerger.cpp
+  src/gt_generator/LaneUtils.cpp
 )
 
 # 노드 실행 파일명을 realtime_builder_node로 설정

@@ -15,7 +15,7 @@
 #include <Eigen/Dense>
 #include <nlohmann/json.hpp>
 
-#include "common/DataTypes.h"
+#include <common/data_types.h>
 
 class CoordinateConverterV1 {
 public:
@@ -53,5 +53,5 @@ private:
     std::string target_frame_id_;
     int file_idx_ = 0;
     bool is_first_frame_ = true;
-    std::vector<Point6D> vehicle_trajectory_;
+    std::vector<linemapdraft_builder::data_types::Point6D> vehicle_trajectory_;
 };
