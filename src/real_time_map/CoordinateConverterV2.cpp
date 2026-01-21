@@ -1,6 +1,7 @@
 #include "real_time_map/CoordinateConverterV2.h"
 #include <ros/package.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl/kdtree/kdtree_flann.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -55,6 +56,7 @@ CoordinateConverterV2::CoordinateConverterV2()
     nh_.param<int>("file_idx", file_idx_, 20000);
     nh_.param<std::string>("vehicle_frame", vehicle_frame_id_, "pcra");
     nh_.param<std::string>("pred_folder", pred_folder_, "model_output/");
+    nh_.param("gt_roi_radius", gt_roi_radius_, 100.0);
     std::string output_folder = "data/issue/converted_bin/";
     nh_.param<std::string>("output_folder", output_folder, output_folder);
     if (!output_folder.empty() && output_folder.back() != '/') {
@@ -269,6 +271,7 @@ void CoordinateConverterV2::saveGlobalMaps() {
     ROS_INFO("Saved BIN Global Map to lidar_seq_1.bin");
 
     saveVehicleTrajectory();
+    saveGtFrames();
 }
 
 void CoordinateConverterV2::saveVehicleTrajectory() {
@@ -294,6 +297,86 @@ void CoordinateConverterV2::saveVehicleTrajectory() {
     std::string trajectory_filename = output_dir_ + "vehicle_trajectory.bin";
     ldb::io::write_points(trajectory_filename, points);
     ROS_INFO("Saved Vehicle Trajectory to vehicle_trajectory.bin (%lu poses)", vehicle_trajectory_.size());
+}
+
+void CoordinateConverterV2::saveGtFrames() {
+    if (vehicle_trajectory_.empty()) {
+        ROS_WARN("No vehicle trajectory, skipping GT frame export");
+        return;
+    }
+
+    saveGtFramesForSequence("points_seq_0.bin", "gt_frame_prev");
+    saveGtFramesForSequence("points_seq_1.bin", "gt_frame_latest");
+}
+
+void CoordinateConverterV2::saveGtFramesForSequence(const std::string& gt_filename,
+                                                    const std::string& output_subdir) {
+    const std::string gt_path = output_dir_ + gt_filename;
+    if (!fs::exists(gt_path)) {
+        ROS_WARN("GT file not found: %s", gt_path.c_str());
+        return;
+    }
+
+    std::vector<ldb::data_types::Point> gt_points;
+    if (!ldb::io::load_points(gt_path, gt_points)) {
+        ROS_WARN("Failed to load GT: %s", gt_path.c_str());
+        return;
+    }
+    if (gt_points.empty()) {
+        ROS_WARN("GT is empty: %s", gt_path.c_str());
+        return;
+    }
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr gt_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    gt_cloud->points.reserve(gt_points.size());
+    for (const auto& p : gt_points) {
+        pcl::PointXYZ pt;
+        pt.x = p.x;
+        pt.y = p.y;
+        pt.z = 0.0f;  // keep ROI filtering in 2D (XY)
+        gt_cloud->points.push_back(pt);
+    }
+
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    kdtree.setInputCloud(gt_cloud);
+
+    const std::string output_dir = output_dir_ + output_subdir + "/";
+    if (!fs::exists(output_dir)) {
+        fs::create_directories(output_dir);
+    }
+
+    std::size_t saved_frames = 0;
+    std::vector<int> indices;
+    std::vector<float> sqr_dists;
+    indices.reserve(1024);
+    sqr_dists.reserve(1024);
+
+    for (std::size_t i = 0; i < vehicle_trajectory_.size(); ++i) {
+        pcl::PointXYZ center;
+        center.x = static_cast<float>(vehicle_trajectory_[i].x);
+        center.y = static_cast<float>(vehicle_trajectory_[i].y);
+        center.z = 0.0f;
+
+        indices.clear();
+        sqr_dists.clear();
+        kdtree.radiusSearch(center, static_cast<float>(gt_roi_radius_), indices, sqr_dists);
+
+        std::vector<ldb::data_types::Point> roi_points;
+        roi_points.reserve(indices.size());
+        for (int idx : indices) {
+            roi_points.push_back(gt_points[static_cast<std::size_t>(idx)]);
+        }
+
+        const std::string out_path = output_dir + "frame_" + std::to_string(i) + ".bin";
+        if (ldb::io::write_points(out_path, roi_points)) {
+            saved_frames++;
+        } else {
+            ROS_WARN("Failed to write GT frame: %s", out_path.c_str());
+        }
+    }
+
+    ROS_INFO("Saved %zu GT frames to %s (source: %s)",
+             saved_frames, output_dir.c_str(), gt_filename.c_str());
 }
 
 void CoordinateConverterV2::run() {

@@ -12,7 +12,8 @@ public:
 
     void run() {
         static_map_loader_.Publish();
-        animation_loader_.Run();
+        animation_loader_.Start();
+        ros::spin();
     }
 
 private:
@@ -23,7 +24,7 @@ private:
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "realtime_viewer_node");
+    ros::init(argc, argv, "realtime_viewer_node", ros::init_options::AnonymousName);
     RealtimeViewerNode node;
     node.run();
     return 0;

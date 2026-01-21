@@ -35,6 +35,9 @@ private:
                                                std::vector<ldb::data_types::Point>& out_points);
     void saveGlobalMaps();
     void saveVehicleTrajectory();
+    void saveGtFrames();
+    void saveGtFramesForSequence(const std::string& gt_filename,
+                                 const std::string& output_subdir);
     void saveMapToFile(const typename pcl::PointCloud<pcl::PointXYZI>::Ptr& map,
                        const std::string& filename, bool filter_mode);
 
@@ -60,6 +63,7 @@ private:
     std::string target_frame_id_;
     std::string frame_id_file_;
     int file_idx_;
+    double gt_roi_radius_ = 100.0;
     std::vector<Point6D> vehicle_trajectory_;
 
     std::size_t pred_frames_saved_ = 0;

@@ -1,18 +1,57 @@
 #include <viewer/viewer_animation_loader.h>
+#include <viewer/viewer_utils.h>
 
-#include <common/io.h>
 #include <geometry_msgs/Point.h>
 #include <ros/package.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/point_cloud2_iterator.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
+#include <array>
+#include <cmath>
 #include <filesystem>
+#include <unordered_map>
 
 namespace fs = std::filesystem;
 
 namespace realtime_line_generator::viewer {
+
+namespace {
+uint32_t HashId(uint32_t id) {
+    uint32_t x = id;
+    x = x * 2654435761u;
+    x = ((x >> 16) ^ x) * 0x45d9f3bu;
+    x = ((x >> 16) ^ x) * 0x45d9f3bu;
+    x = (x >> 16) ^ x;
+    return x;
+}
+
+std::array<float, 3> HsvToRgb(float h, float s, float v) {
+    if (s == 0.0f) {
+        return {v, v, v};
+    }
+    int i = static_cast<int>(h * 6.0f);
+    float f = (h * 6.0f) - i;
+    float p = v * (1.0f - s);
+    float q = v * (1.0f - s * f);
+    float t = v * (1.0f - s * (1.0f - f));
+    i %= 6;
+    switch (i) {
+        case 0: return {v, t, p};
+        case 1: return {q, v, p};
+        case 2: return {p, v, t};
+        case 3: return {p, q, v};
+        case 4: return {t, p, v};
+        default: return {v, p, q};
+    }
+}
+
+std::array<float, 3> ColorForId(int id, int seq_idx) {
+    uint32_t seed = static_cast<uint32_t>(id) ^ (static_cast<uint32_t>(seq_idx) * 0x9e3779b9u);
+    uint32_t hashed_id = HashId(seed);
+    float hue = std::fmod(static_cast<float>(hashed_id) * 0.61803398875f, 1.0f);
+    return HsvToRgb(hue, 0.85f, 0.95f);
+}
+}  // namespace
 
 namespace ldb = linemapdraft_builder;
 
@@ -30,10 +69,12 @@ AnimationLoader::AnimationLoader(ros::NodeHandle& nh, OffsetState& offset)
     nh_.param("publish_voxels", publish_voxels_, true);
     nh_.param("publish_polylines", publish_polylines_, true);
     nh_.param("publish_merged_polylines", publish_merged_polylines_, true);
+    nh_.param("publish_gt_frame_prev", publish_gt_frame_prev_, true);
+    nh_.param("publish_gt_frame_latest", publish_gt_frame_latest_, true);
     nh_.param("publish_vehicle_pose", publish_vehicle_pose_, true);
 
     std::string pkg_path = ros::package::getPath("realtime_line_generator");
-    normalizeFolder(output_folder_);
+    NormalizeFolder(output_folder_);
     output_root_ = pkg_path + "/" + output_folder_ + std::to_string(file_idx_) + "/";
 
     frames_dir_ = output_root_ + "frames/";
@@ -41,12 +82,16 @@ AnimationLoader::AnimationLoader(ros::NodeHandle& nh, OffsetState& offset)
     voxels_dir_ = output_root_ + "voxels/";
     polylines_dir_ = output_root_ + "polylines/";
     merged_polylines_dir_ = output_root_ + "merged_polylines/";
+    gt_frame_prev_dir_ = output_root_ + "gt_frame_prev/";
+    gt_frame_latest_dir_ = output_root_ + "gt_frame_latest/";
     vehicle_trajectory_path_ = output_root_ + "vehicle_trajectory.bin";
 
     frame_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("frame_points", 1);
     voxel_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("active_voxels", 1);
     polyline_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("detected_polylines", 1);
     merged_polyline_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("merged_polylines", 1);
+    gt_prev_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("gt_frame_prev", 1);
+    gt_latest_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("gt_frame_latest", 1);
     vehicle_pose_pub_ = nh_.advertise<visualization_msgs::Marker>("vehicle_pose", 1);
 
     // 평가 결과 발행 여부 파라미터 (선택 사항)
@@ -73,35 +118,65 @@ AnimationLoader::AnimationLoader(ros::NodeHandle& nh, OffsetState& offset)
         ROS_WARN("No frame files found under %s", frame_dir.c_str());
     }
 
+    current_frame_ = start_frame_;
+
     if (publish_vehicle_pose_) {
-        if (!loadPointsIfExists(vehicle_trajectory_path_, vehicle_trajectory_)) {
+        if (!LoadPointsIfExists(vehicle_trajectory_path_, vehicle_trajectory_)) {
             ROS_WARN("Vehicle trajectory not found: %s", vehicle_trajectory_path_.c_str());
         }
     }
 }
 
-void AnimationLoader::Run() {
-    ros::Rate loop_rate(playback_rate_);
-    int current_frame = start_frame_;
+void AnimationLoader::Start() {
+    current_frame_ = start_frame_;
+    is_playing_ = true;
+    timer_ = nh_.createTimer(
+        ros::Duration(1.0 / playback_rate_),
+        &AnimationLoader::timerCallback, this);
+    ROS_INFO("Animation started from frame %d", current_frame_);
+}
 
-    while (ros::ok()) {
-        while (ros::ok() && current_frame <= end_frame_) {
-            publishFrame(current_frame);
-            current_frame += frame_step_;
-            ros::spinOnce();
-            loop_rate.sleep();
-        }
-        if (!loop_playback_) {
-            break;
-        }
-        current_frame = start_frame_;
+void AnimationLoader::Stop() {
+    timer_.stop();
+    is_playing_ = false;
+    current_frame_ = start_frame_;
+    ROS_INFO("Animation stopped");
+}
+
+void AnimationLoader::Pause() {
+    timer_.stop();
+    is_playing_ = false;
+    ROS_INFO("Animation paused at frame %d", current_frame_);
+}
+
+void AnimationLoader::Resume() {
+    if (!is_playing_) {
+        is_playing_ = true;
+        timer_.start();
+        ROS_INFO("Animation resumed from frame %d", current_frame_);
     }
 }
 
-void AnimationLoader::normalizeFolder(std::string& folder) {
-    if (!folder.empty() && folder.back() != '/') {
-        folder.push_back('/');
+void AnimationLoader::Seek(int frame_index) {
+    if (frame_index >= start_frame_ && frame_index <= end_frame_) {
+        current_frame_ = frame_index;
+        publishFrame(current_frame_);
+        ROS_INFO("Seeked to frame %d", current_frame_);
+    } else {
+        ROS_WARN("Seek frame %d out of range [%d, %d]", frame_index, start_frame_, end_frame_);
     }
+}
+
+void AnimationLoader::timerCallback(const ros::TimerEvent& event) {
+    if (current_frame_ > end_frame_) {
+        if (!loop_playback_) {
+            Stop();
+            return;
+        }
+        current_frame_ = start_frame_;
+    }
+    publishFrame(current_frame_);
+    current_frame_ += frame_step_;
 }
 
 std::string AnimationLoader::framePath(const std::string& dir, int index) const {
@@ -110,6 +185,7 @@ std::string AnimationLoader::framePath(const std::string& dir, int index) const 
 
 int AnimationLoader::maxFrameIndexInDir(const std::string& dir) const {
     if (!fs::exists(dir)) {
+        ROS_DEBUG("Directory does not exist: %s", dir.c_str());
         return -1;
     }
     int max_index = -1;
@@ -132,66 +208,11 @@ int AnimationLoader::maxFrameIndexInDir(const std::string& dir) const {
             if (idx > max_index) {
                 max_index = idx;
             }
-        } catch (...) {
+        } catch (const std::exception& e) {
+            ROS_WARN("Failed to parse frame index from '%s': %s", stem.c_str(), e.what());
         }
     }
     return max_index;
-}
-
-bool AnimationLoader::loadPointsIfExists(
-    const std::string& path,
-    std::vector<linemapdraft_builder::data_types::Point>& points) {
-    if (!fs::exists(path)) {
-        return false;
-    }
-    return linemapdraft_builder::io::load_points(path, points);
-}
-
-bool AnimationLoader::loadPolylinesIfExists(
-    const std::string& path,
-    std::vector<std::vector<linemapdraft_builder::data_types::Point>>& polylines) {
-    if (!fs::exists(path)) {
-        return false;
-    }
-    return linemapdraft_builder::io::load_polylines(path, polylines);
-}
-
-void AnimationLoader::publishPointCloud(
-    const std::vector<linemapdraft_builder::data_types::Point>& points,
-    ros::Publisher& pub) {
-    if (points.empty()) {
-        return;
-    }
-
-    sensor_msgs::PointCloud2 msg;
-    msg.header.stamp = ros::Time::now();
-    msg.header.frame_id = frame_id_;
-
-    sensor_msgs::PointCloud2Modifier modifier(msg);
-    modifier.setPointCloud2Fields(4,
-                                  "x", 1, sensor_msgs::PointField::FLOAT32,
-                                  "y", 1, sensor_msgs::PointField::FLOAT32,
-                                  "z", 1, sensor_msgs::PointField::FLOAT32,
-                                  "intensity", 1, sensor_msgs::PointField::FLOAT32);
-    modifier.resize(points.size());
-
-    sensor_msgs::PointCloud2Iterator<float> out_x(msg, "x");
-    sensor_msgs::PointCloud2Iterator<float> out_y(msg, "y");
-    sensor_msgs::PointCloud2Iterator<float> out_z(msg, "z");
-    sensor_msgs::PointCloud2Iterator<float> out_i(msg, "intensity");
-
-    for (const auto& p : points) {
-        *out_x = p.x - offset_.x;
-        *out_y = p.y - offset_.y;
-        *out_z = p.z;
-        *out_i = p.yaw;
-        ++out_x;
-        ++out_y;
-        ++out_z;
-        ++out_i;
-    }
-
-    pub.publish(msg);
 }
 
 void AnimationLoader::publishPolylines(
@@ -227,6 +248,57 @@ void AnimationLoader::publishPolylines(
             line_strip.points.push_back(p);
         }
         marker_array.markers.push_back(line_strip);
+    }
+
+    pub.publish(marker_array);
+}
+
+void AnimationLoader::publishPointsByPolylineId(
+    const std::vector<linemapdraft_builder::data_types::Point>& points,
+    ros::Publisher& pub,
+    const std::string& ns,
+    float scale,
+    int seq_idx) {
+    if (points.empty()) {
+        return;
+    }
+
+    std::unordered_map<int32_t, std::vector<geometry_msgs::Point>> grouped;
+    grouped.reserve(points.size());
+
+    for (const auto& p : points) {
+        geometry_msgs::Point pt;
+        pt.x = p.x - offset_.x;
+        pt.y = p.y - offset_.y;
+        pt.z = p.z;
+        grouped[p.polyline_id].push_back(pt);
+    }
+
+    visualization_msgs::MarkerArray marker_array;
+    visualization_msgs::Marker delete_marker;
+    delete_marker.action = visualization_msgs::Marker::DELETEALL;
+    marker_array.markers.push_back(delete_marker);
+
+    int marker_id = 0;
+    for (const auto& [id, pts] : grouped) {
+        if (pts.empty()) continue;
+
+        auto [r, g, b] = ColorForId(id, seq_idx);
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = frame_id_;
+        marker.header.stamp = ros::Time::now();
+        marker.ns = ns;
+        marker.id = marker_id++;
+        marker.type = visualization_msgs::Marker::POINTS;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.scale.x = scale;
+        marker.scale.y = scale;
+        marker.color.r = r;
+        marker.color.g = g;
+        marker.color.b = b;
+        marker.color.a = 1.0f;
+        marker.points = pts;
+        marker_array.markers.push_back(marker);
     }
 
     pub.publish(marker_array);
@@ -271,6 +343,8 @@ void AnimationLoader::publishVehiclePose(int frame_index) {
 void AnimationLoader::publishFrame(int frame_index) {
     std::vector<linemapdraft_builder::data_types::Point> frame_points;
     std::vector<linemapdraft_builder::data_types::Point> voxel_points;
+    std::vector<linemapdraft_builder::data_types::Point> gt_prev_points;
+    std::vector<linemapdraft_builder::data_types::Point> gt_latest_points;
     std::vector<std::vector<linemapdraft_builder::data_types::Point>> polylines;
     std::vector<std::vector<linemapdraft_builder::data_types::Point>> merged_polylines;
     std::vector<std::vector<ldb::data_types::Point>> fp_lines, fn_lines;
@@ -280,28 +354,38 @@ void AnimationLoader::publishFrame(int frame_index) {
     const std::string voxel_path = framePath(voxels_dir_, frame_index);
     const std::string polyline_path = framePath(polylines_dir_, frame_index);
     const std::string merged_path = framePath(merged_polylines_dir_, frame_index);
+    const std::string gt_prev_path = framePath(gt_frame_prev_dir_, frame_index);
+    const std::string gt_latest_path = framePath(gt_frame_latest_dir_, frame_index);
     const std::string fp_path = eval_fp_dir_ + std::to_string(frame_index) + ".bin";
     const std::string fn_path = eval_fn_dir_ + std::to_string(frame_index) + ".bin";
 
     if (publish_frame_points_) {
-        bool loaded = loadPointsIfExists(frame_path, frame_points);
+        bool loaded = LoadPointsIfExists(frame_path, frame_points);
         if (!loaded && !use_pred_frames_) {
-            loaded = loadPointsIfExists(framePath(pred_frames_dir_, frame_index), frame_points);
+            loaded = LoadPointsIfExists(framePath(pred_frames_dir_, frame_index), frame_points);
         }
         if (loaded) {
             MaybeInitOffsetFromPoints(offset_, frame_points);
-            publishPointCloud(frame_points, frame_pub_);
+            PublishPointCloud(frame_points, offset_, frame_id_, frame_pub_);
         }
     }
-    if (publish_voxels_ && loadPointsIfExists(voxel_path, voxel_points)) {
+    if (publish_voxels_ && LoadPointsIfExists(voxel_path, voxel_points)) {
         MaybeInitOffsetFromPoints(offset_, voxel_points);
-        publishPointCloud(voxel_points, voxel_pub_);
+        PublishPointCloud(voxel_points, offset_, frame_id_, voxel_pub_);
     }
-    if (publish_polylines_ && loadPolylinesIfExists(polyline_path, polylines)) {
+    if (publish_gt_frame_prev_ && LoadPointsIfExists(gt_prev_path, gt_prev_points)) {
+        MaybeInitOffsetFromPoints(offset_, gt_prev_points);
+        publishPointsByPolylineId(gt_prev_points, gt_prev_pub_, "gt_frame_prev", 0.2f, 0);
+    }
+    if (publish_gt_frame_latest_ && LoadPointsIfExists(gt_latest_path, gt_latest_points)) {
+        MaybeInitOffsetFromPoints(offset_, gt_latest_points);
+        publishPointsByPolylineId(gt_latest_points, gt_latest_pub_, "gt_frame_latest", 0.2f, 1);
+    }
+    if (publish_polylines_ && LoadPolylinesIfExists(polyline_path, polylines)) {
         MaybeInitOffsetFromPolylines(offset_, polylines);
         publishPolylines(polylines, polyline_pub_, "polylines", 0.0f, 1.0f, 0.0f);
     }
-    if (publish_merged_polylines_ && loadPolylinesIfExists(merged_path, merged_polylines)) {
+    if (publish_merged_polylines_ && LoadPolylinesIfExists(merged_path, merged_polylines)) {
         MaybeInitOffsetFromPolylines(offset_, merged_polylines);
         publishPolylines(merged_polylines, merged_polyline_pub_, "merged_polylines", 1.0f, 0.2f, 0.2f);
     }

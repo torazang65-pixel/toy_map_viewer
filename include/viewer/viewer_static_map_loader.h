@@ -3,6 +3,7 @@
 #include <ros/ros.h>
 
 #include <string>
+#include <map>
 
 #include <viewer/viewer_offset.h>
 
@@ -15,16 +16,11 @@ public:
     void Publish();
 
 private:
-    void normalizeFolder(std::string& folder);
-    bool loadPointsIfExists(
-        const std::string& path,
-        std::vector<linemapdraft_builder::data_types::Point>& points);
-    void publishPointCloud(const std::vector<linemapdraft_builder::data_types::Point>& points,
-                           ros::Publisher& pub);
     void publishPointsByPolylineId(const std::vector<linemapdraft_builder::data_types::Point>& points,
                                    ros::Publisher& pub,
                                    const std::string& ns,
-                                   float scale);
+                                   float scale,
+                                   int seq_idx);
 
     bool loadPolylinesIfExists(
         const std::string& path,
@@ -42,10 +38,14 @@ private:
     ros::Publisher converted_map_raw_pub_;
     ros::Publisher gt_map_pub_;
 
+    // dynamic publishers for points/lidar sequences
+    // Key: topic name (e.g., points_seq_0, lidar_seq_2)
+    std::map<std::string, ros::Publisher> points_pubs_;
+    std::map<std::string, ros::Publisher> lidar_pubs_;
+
     std::string output_folder_;
     std::string output_root_;
     std::string converted_root_;
-    std::string map_points_path_;
     std::string frame_id_;
     std::string gt_path_;
     std::string traj_path_;

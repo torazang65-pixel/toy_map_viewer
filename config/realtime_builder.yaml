@@ -10,12 +10,14 @@ use_pred_frames: true
 frame_id: "map"
 vehicle_frame: "pcra"
 pred_folder: "model_output/" # issue_laneline_pred_nms or model_output
-coordinate_converter_version: 2
+pipeline_version: 2 # 1. global_maps, 2. prev & latest
+gt_roi_radius: 100.0
 
+# 기존 분들이 하시던 알고리즘을 그대로 implement함.
 voxel_size: 0.5
 yaw_voxel_num: 1
 min_density_threshold: 5
-use_voxel_aging: false
+use_voxel_aging: true
 voxel_aging_interval: 10
 max_voxel_age: 100
 

@@ -14,3 +14,5 @@ publish_vehicle_pose: true
 publish_map_points: true
 publish_converted_filtered: true
 publish_converted_raw: true
+publish_gt_frame_prev: true
+publish_gt_frame_latest: true

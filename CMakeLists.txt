@@ -34,6 +34,7 @@ add_definitions(${PCL_DEFINITIONS})
 
 # 실행 파일 생성
 add_library(${PROJECT_NAME}
+  src/realtime_line_generator/MapConverterV1.cpp
   src/realtime_line_generator/MapConverterV2.cpp
   src/real_time_map/CoordinateConverterV1.cpp
   src/real_time_map/CoordinateConverterV2.cpp
