@@ -22,10 +22,6 @@ private:
                                    float scale,
                                    int seq_idx);
 
-    bool loadPolylinesIfExists(
-        const std::string& path,
-        std::vector<std::vector<linemapdraft_builder::data_types::Point>>& polylines);
-
     void publishPolylines(
         const std::vector<std::vector<linemapdraft_builder::data_types::Point>>& polylines,
         ros::Publisher& pub, const std::string& ns, float r, float g, float b);

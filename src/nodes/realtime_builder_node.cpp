@@ -148,7 +148,7 @@ public:
         }
 
         ROS_INFO("Phase 1 Complete. Starting Phase 2: Evaluation...");
-        performEvaluation();
+        //performEvaluation();
 
         logSaveSummary();
         builder_.logTimingSummary();

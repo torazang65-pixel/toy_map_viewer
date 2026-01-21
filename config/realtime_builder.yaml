@@ -1,8 +1,8 @@
 package_name: "realtime_line_generator"
-file_idx: 3
-file_name: "3"
+file_idx: 2
+file_name: "2"
 input_topic: "/points_raw"
-input_folder: "data/lane_change_data/map_latest/"   # data/issue/global_maps/ or data/lane_change_data/map_latest/
+input_folder: "data/issue/global_maps/"   # data/issue/global_maps/ or data/lane_change_data/map_latest/
 output_folder: "data/issue/converted_bin/"
 start_frame: 0
 playback_rate: 10.0

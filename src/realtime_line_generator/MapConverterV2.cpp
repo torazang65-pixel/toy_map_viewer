@@ -170,6 +170,6 @@ void MapConverterV2::processMap(const std::string& input_subdir, const std::stri
     }
 
     // 정렬과 병합이 완료된 깨끗한 데이터를 구조화된 폴리라인 형식으로 저장합니다.
-    ldb::io::write_polylines(output_dir_ + "gt.bin", gt_polylines);
+    ldb::io::write_polylines(output_root_dir_ + "gt.bin", gt_polylines);
     ROS_INFO("Saved refined gt.bin (%lu merged lanes).", gt_polylines.size());
 }
