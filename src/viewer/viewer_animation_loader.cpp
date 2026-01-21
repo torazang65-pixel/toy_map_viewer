@@ -396,12 +396,12 @@ void AnimationLoader::publishFrame(int frame_index) {
     std::vector<std::vector<ldb::data_types::Point>> fp_lines, fn_lines;
     
     // FP(오탐) 로드 및 빨간색 시각화
-    if (loadPolylinesIfExists(fp_path, fp_lines)) {
+    if (LoadPolylinesIfExists(fp_path, fp_lines)) {
         publishPolylines(fp_lines, eval_fp_pub_, "false_positives", 1.0f, 0.0f, 0.0f);
     }
     
     // FN(미탐) 로드 및 파란색 시각화
-    if (loadPolylinesIfExists(fn_path, fn_lines)) {
+    if (LoadPolylinesIfExists(fn_path, fn_lines)) {
         publishPolylines(fn_lines, eval_fn_pub_, "false_negatives", 0.0f, 0.0f, 1.0f);
     }
 }

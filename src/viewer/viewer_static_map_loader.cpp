@@ -85,7 +85,7 @@ void StaticMapLoader::Publish() {
 
     // gt.bin 시각화 로직
     std::vector<std::vector<linemapdraft_builder::data_types::Point>> gt_polylines;
-    if (loadPolylinesIfExists(gt_path_, gt_polylines)) {
+    if (LoadPolylinesIfExists(gt_path_, gt_polylines)) {
         MaybeInitOffsetFromPolylines(offset_, gt_polylines);
         // 노란색(1.0, 1.0, 0.0) 선으로 발행
         publishPolylines(gt_polylines, gt_map_pub_, "gt_map", 1.0f, 1.0f, 0.0f);
