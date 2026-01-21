@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/DataTypes.h"
+#include <common/data_types.h>
 
 struct LaneConfig {
     //Map Convereter Node
@@ -24,24 +24,27 @@ struct LaneConfig {
 
 namespace LaneUtils{
     // Math Utils
-    double GetDistanceSq(const Point6D& a, const Point6D& b);
-    double GetDistance(const Point6D& a, const Point6D& b);
-    double GetAngleDegrees(const Point6D& v1, const Point6D& v2);
+    double GetDistanceSq(const linemapdraft_builder::data_types::Point6D& a,
+                         const linemapdraft_builder::data_types::Point6D& b);
+    double GetDistance(const linemapdraft_builder::data_types::Point6D& a,
+                       const linemapdraft_builder::data_types::Point6D& b);
+    double GetAngleDegrees(const linemapdraft_builder::data_types::Point6D& v1,
+                           const linemapdraft_builder::data_types::Point6D& v2);
 
     // Lane Utils
     /**
      * @brief calculate length of a lane
      */
-    double CalculateLaneLength(const Lane& lane);
+    double CalculateLaneLength(const linemapdraft_builder::data_types::Lane& lane);
     /**
      * @brief calculate linearity of a lane
      */
-    double CalculateLaneLinearity(const Lane& lane);
+    double CalculateLaneLinearity(const linemapdraft_builder::data_types::Lane& lane);
 
     /**
      * @brief reorder Lane base on distance and direction of points (legacy version)
      */
-    void ReorderPoints(Lane& lane);
+    void ReorderPoints(linemapdraft_builder::data_types::Lane& lane);
 
     /**
      * @brief Improved reorder Lane using KD-tree and PCA-based endpoint detection
@@ -49,7 +52,7 @@ namespace LaneUtils{
      * @param smooth Enable smoothing pass (default: true)
      * @param maxPointDistance Maximum allowed distance between consecutive points (default: 3.0m)
      */
-    void ReorderPointsImproved(Lane& lane);
+    void ReorderPointsImproved(linemapdraft_builder::data_types::Lane& lane);
     // Can add new functions here about lanes (i.e. distance between lanes, etc.)
     // double CalculateLaneLength(const Lane& lane);
 }

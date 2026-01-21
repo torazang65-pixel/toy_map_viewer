@@ -2,8 +2,8 @@
 #include <ros/package.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <realtime_line_generator/MapConverterV1.h>
-#include <realtime_line_generator/MapConverterV2.h>
+#include <gt_generator/MapConverterV1.h>
+#include <gt_generator/MapConverterV2.h>
 #include <realtime_line_generator/realtime_line_builder.h>
 #include <real_time_map/CoordinateConverterV1.h>
 #include <real_time_map/CoordinateConverterV2.h>

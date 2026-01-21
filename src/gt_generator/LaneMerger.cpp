@@ -9,8 +9,11 @@
 #include <queue>
 #include <deque>
 
-#include "realtime_line_generator/LaneMerger.h"
-#include "realtime_line_generator/LaneUtils.h"
+#include "gt_generator/LaneMerger.h"
+#include "gt_generator/LaneUtils.h"
+
+using linemapdraft_builder::data_types::Lane;
+using linemapdraft_builder::data_types::Point6D;
 
 namespace LaneMerger {
     // --- struct definitions ---
