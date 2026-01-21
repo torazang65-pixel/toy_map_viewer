@@ -1,6 +1,6 @@
 package_name: "realtime_line_generator"
-file_idx: 2 # 자주 변경하는 곳
-file_name: 2 # 자주 변경하는 곳
+file_idx: 0 # 자주 변경하는 곳
+file_name: 0 # 자주 변경하는 곳
 input_topic: "/points_raw"
 input_folder: "data/issue/global_maps/"
 output_folder: "data/issue/converted_bin/"
@@ -8,17 +8,17 @@ start_frame: 0
 playback_rate: 10.0
 use_pred_frames: true
 frame_id: "map"
-sensor_frame: "pandar64_0" # pandar64_0 or pandar64_1
+sensor_frame: "pandar64_1" # pandar64_0 or pandar64_1
 vehicle_frame: "pcra"
 pred_folder: "model_output/" # issue_laneline_pred_nms or model_output
-map_converter_version: 2 # 1. global_maps, 2. prev & latest
-coordinate_converter_version: 2 # 1. global_maps, 2. prev & latest
+pipeline_version: 2 # 1. global_maps, 2. prev & latest
+gt_roi_radius: 100.0
 
 # 기존 분들이 하시던 알고리즘을 그대로 implement함.
 voxel_size: 0.5
 yaw_voxel_num: 1
 min_density_threshold: 5
-use_voxel_aging: false
+use_voxel_aging: true
 voxel_aging_interval: 10
 max_voxel_age: 100
 

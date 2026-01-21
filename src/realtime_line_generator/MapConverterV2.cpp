@@ -31,10 +31,6 @@ void MapConverterV2::loadParameters() {
     base_input_dir_ = pkg_path + "/" + base_input_dir_;
     output_root_dir_ = pkg_path + "/" + output_root_dir_ + std::to_string(lane_config_.file_idx) + "/";
 
-    if (fs::exists(output_root_dir_)) {
-        fs::remove_all(output_root_dir_);
-        ROS_INFO("[MapConverterV2] Cleared existing directory: %s", output_root_dir_.c_str());
-    }
     fs::create_directories(output_root_dir_);
 }
 

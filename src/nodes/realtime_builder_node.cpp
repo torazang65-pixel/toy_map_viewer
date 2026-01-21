@@ -45,6 +45,11 @@ public:
         polylines_dir_ = output_root_ + "polylines/";
         merged_polylines_dir_ = output_root_ + "merged_polylines/";
 
+        if (fs::exists(output_root_)) {
+            fs::remove_all(output_root_);
+            ROS_INFO("Cleared existing output directory: %s", output_root_.c_str());
+        }
+
         createDirectories();
 
         if (!use_pred_frames_) {

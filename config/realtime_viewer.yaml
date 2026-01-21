@@ -1,5 +1,5 @@
 output_folder: "data/issue/converted_bin/"
-file_idx: 2
+file_idx: 0
 start_frame: 0
 frame_step: 1
 playback_rate: 10.0
@@ -14,3 +14,5 @@ publish_vehicle_pose: true
 publish_map_points: true
 publish_converted_filtered: true
 publish_converted_raw: true
+publish_gt_frame_prev: true
+publish_gt_frame_latest: true
