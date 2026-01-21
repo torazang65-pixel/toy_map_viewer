@@ -29,6 +29,7 @@ public:
         nh_.param("playback_rate", playback_rate_, 10.0);
         nh_.param("use_pred_frames", use_pred_frames_, false);
         nh_.param<std::string>("frame_id", frame_id_, "map");
+        nh_.param("perform_evaluation", perform_evaluation_, false);
         int pipeline_version = 0;
         if (nh_.getParam("pipeline_version", pipeline_version)) {
             map_converter_version_ = pipeline_version;
@@ -148,7 +149,8 @@ public:
         }
 
         ROS_INFO("Phase 1 Complete. Starting Phase 2: Evaluation...");
-        //performEvaluation();
+
+        if(perform_evaluation_) performEvaluation();
 
         logSaveSummary();
         builder_.logTimingSummary();
@@ -321,6 +323,7 @@ private:
     int end_frame_ = -1;
     double playback_rate_;
     bool use_pred_frames_;
+    bool perform_evaluation_;
     int coordinate_converter_version_;
     int map_converter_version_;
     std::thread map_converter_thread_;

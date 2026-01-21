@@ -19,14 +19,14 @@ RealTimeEvaluator::RealTimeEvaluator(ros::NodeHandle& nh) {
 }
 
 bool RealTimeEvaluator::init(const std::string& gt_path, const std::string& traj_path) {
-    // 1. 전체 GT 로드 (이 부분은 유지)
+    // 1. 전체 GT 로드 
     if (!ldb::io::load_polylines(gt_path, full_gt_map_)) return false;
 
-    // 2. 차량 궤적 로드 (수정된 로직)
+    // 2. 차량 궤적 로드 
     std::ifstream ifs(traj_path, std::ios::binary);
     if (!ifs) return false;
 
-    // [수정] 파일 처음에 기록된 4바이트 헤더(포즈 개수)를 먼저 읽습니다.
+    // 파일 처음에 기록된 4바이트 헤더(포즈 개수)를 먼저 읽습니다.
     uint32_t num_poses = 0;
     ifs.read(reinterpret_cast<char*>(&num_poses), 4);
 
@@ -35,7 +35,7 @@ bool RealTimeEvaluator::init(const std::string& gt_path, const std::string& traj
         return false;
     }
 
-    // [수정] 개수만큼 정확히 읽어옵니다.
+    // 개수만큼 정확히 읽어옵니다.
     vehicle_trajectory_.clear();
     vehicle_trajectory_.resize(num_poses);
     for (uint32_t i = 0; i < num_poses; ++i) {
@@ -57,7 +57,7 @@ void RealTimeEvaluator::evaluateFrame(int frame_idx, const std::vector<std::vect
         ROS_INFO_STREAM_ONCE("Check GT: x=" << full_gt_map_[0][0].x << ", y=" << full_gt_map_[0][0].y);
     }
 
-    // [Step 1] ROI 필터링 (반경 100m)
+    // [Step 1] ROI 필터링 (반경 eval_radius_)
     std::vector<std::vector<ldb::data_types::Point>> roi_gt, roi_draft;
     filterPolylines(full_gt_map_, roi_gt, current_pose, eval_radius_);
     filterPolylines(draft_polylines, roi_draft, current_pose, eval_radius_);
