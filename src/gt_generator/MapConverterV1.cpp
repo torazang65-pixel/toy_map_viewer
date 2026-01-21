@@ -1,7 +1,7 @@
-#include "realtime_line_generator/MapConverterV1.h"
-#include "realtime_line_generator/LaneUtils.h"
-#include "realtime_line_generator/LaneCleaner.h"
-#include "realtime_line_generator/LaneMerger.h"
+#include "gt_generator/MapConverterV1.h"
+#include "gt_generator/LaneUtils.h"
+#include "gt_generator/LaneCleaner.h"
+#include "gt_generator/LaneMerger.h"
 #include "common/io.h"
 
 #include <filesystem>
