@@ -1,0 +1,57 @@
+package_name: "realtime_line_generator"
+file_idx: 20184
+file_name: "20184"
+input_topic: "/points_raw"
+input_folder: "data/issue/global_maps/"   # data/issue/global_maps/
+output_folder: "data/issue/converted_bin/"
+start_frame: 0
+playback_rate: 10.0
+use_pred_frames: true
+frame_id: "map"
+vehicle_frame: "pcra"
+pred_folder: "issue_laneline_pred_nms/" # issue_laneline_pred_nms or model_output
+pipeline_version: 1 # 1. global_maps, 2. prev & latest
+gt_roi_radius: 100.0
+perform_evaluation: true
+
+# 기존 분들이 하시던 알고리즘을 그대로 implement함.
+voxel_size: 0.5
+yaw_voxel_num: 1
+min_density_threshold: 5
+use_voxel_aging: true
+voxel_aging_interval: 10
+max_voxel_age: 100
+
+neighbor_dist_thresh: 2.0
+cylinder_search_width: 1.0
+alpha: 0.7
+beta: 0.9
+drop_width: 1.0
+
+use_vw: true
+use_rdp: true
+vw_eps: 0.3
+vw_eps_2: 0.2
+rdp_eps: 0.1
+
+merge_min_dist_th: 1.0
+merge_max_dist_th: 10.0
+merge_min_angle_th: 0.1
+merge_max_angle_th: 0.3
+min_polyline_length: 3.0
+
+
+eval_radius: 30.0
+dist_th: 0.5
+yaw_th: 0.8
+resample_dist: 0.3
+
+# polyline resampling params
+sampling_distance: 10.0
+
+# evaluation params
+chamfer_dist_th: 0.5
+point_iou_th: 0.2
+resample_distance: 0.3
+dist_th: 0.5
+yaw_th: 0.8

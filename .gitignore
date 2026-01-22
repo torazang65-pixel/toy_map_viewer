@@ -3,3 +3,8 @@ data/
 
 src_backup/
 Raw/
+bag/
+paper/
+
+.DS_Store
+.venv/

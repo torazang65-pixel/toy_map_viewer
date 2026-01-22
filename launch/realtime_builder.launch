@@ -1,0 +1,14 @@
+<launch>
+  <arg name="params_file" default="$(find realtime_line_generator)/config/realtime_builder.yaml" />
+
+  <node pkg="rf_tf_broadcaster" type="sensor_tf_broadcaster_node" name="sensor_tf_broadcaster" output="screen">
+    <rosparam command="load" file="$(arg params_file)" />
+  </node>
+  <node pkg="rf_tf_broadcaster" type="map_tf_broadcaster_node" name="map_tf_broadcaster" output="screen">
+    <rosparam command="load" file="$(arg params_file)" />
+  </node>
+
+  <node pkg="realtime_line_generator" type="realtime_builder_node" name="realtime_builder_node" output="screen">
+    <rosparam command="load" file="$(arg params_file)" />
+  </node>
+</launch>
